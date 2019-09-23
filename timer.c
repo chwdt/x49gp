@@ -20,6 +20,8 @@
 
 #include <glib.h>
 
+#include "gdbstub.h"
+
 typedef struct {
 	long			type;
 } x49gp_clock_t;
@@ -147,7 +149,7 @@ x49gp_timer_expired(x49gp_timer_t *timer_head, int64_t current_time)
 	return (timer_head->expires <= current_time);
 }
 
-#ifndef QEMU_OLD // LD TEMPO HACK
+/* LD TEMPO HACK */
 
 QEMUTimer *
 qemu_new_timer(QEMUClock *clock, QEMUTimerCB cb, void *opaque)
@@ -185,8 +187,6 @@ qemu_get_clock(QEMUClock *clock)
 	return x49gp_get_clock();
 }
 
-#endif /* QEMU_OLD */
-
 static void
 x49gp_run_timers(x49gp_timer_t **ptimer_head, int64_t current_time)
 {
@@ -216,15 +216,9 @@ x49gp_alarm_handler(int sig)
 				x49gp_get_clock()) ||
 	    x49gp_timer_expired(x49gp_timer_lists[X49GP_TIMER_REALTIME],
 				x49gp_get_clock())) {
-#ifdef QEMU_OLD
-		if (cpu_single_env && ! (cpu_single_env->interrupt_request & CPU_INTERRUPT_EXIT)) {
-			cpu_interrupt(cpu_single_env, CPU_INTERRUPT_EXIT);
-		}
-#else
 		if (cpu_single_env && ! cpu_single_env->exit_request) {
 			cpu_exit(cpu_single_env);
 		}
-#endif
 	}
 }
 
@@ -233,11 +227,9 @@ x49gp_main_loop_wait(x49gp_t *x49gp, int timeout)
 {
 // printf("%s: timeout: %d\n", __FUNCTION__, timeout);
 
-#if 0
 	if (gdb_poll(x49gp->env)) {
 		gdb_handlesig(x49gp->env, 0);
 	} else
-#endif
 	poll(NULL, 0, timeout);
 
 	if (x49gp->arm_idle != X49GP_ARM_OFF) {
@@ -278,11 +270,10 @@ printf("PC %08x: SRAM %08x: %08x %08x %08x <%08x>\n", x49gp->env->regs[15], 0x08
 * ((uint32_t *) &x49gp->sram[0x0a0c]) = 0x00000000;
 }
 
-#if 0
 			if (ret == EXCP_DEBUG) {
 				gdb_handlesig(x49gp->env, SIGTRAP);
+				continue;
 			}
-#endif
 
 			if (x49gp->arm_idle != prev_idle) {
 				if (x49gp->arm_idle == X49GP_ARM_OFF) {

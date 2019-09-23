@@ -8,13 +8,9 @@
 #include <errno.h>
 #include <sys/stat.h>
 
-#ifndef QEMU_OLD
 #include "qemu-common.h"
-#endif
 #include <block.h>
-#ifndef QEMU_OLD
 #include "block_int.h"
-#endif
 
 #define SECTOR_BITS	9
 #define SECTOR_SIZE	(1 << SECTOR_BITS)
@@ -156,14 +152,24 @@ find_protocol(const char *filename)
 	memcpy(protocol, filename, len);
 	protocol[len] = '\0';
 	for(drv1 = first_drv; drv1 != NULL; drv1 = drv1->next) {
-fprintf(stderr, "%s:%u: protocol '%s', drv->protocol_name '%s'\n", __FUNCTION__, __LINE__, protocol, drv1->protocol_name);
+#ifdef DEBUG_X49GP_BLOCK
+		fprintf(stderr,
+			"%s:%u: protocol '%s', drv->protocol_name '%s'\n",
+			__FUNCTION__, __LINE__, protocol, drv1->protocol_name);
+#endif
 		if (drv1->protocol_name && 
 		    !strcmp(drv1->protocol_name, protocol)) {
-fprintf(stderr, "%s:%u: protocol '%s', drv %p\n", __FUNCTION__, __LINE__, protocol, drv1);
+#ifdef DEBUG_X49GP_BLOCK
+			fprintf(stderr, "%s:%u: protocol '%s', drv %p\n",
+				__FUNCTION__, __LINE__, protocol, drv1);
+#endif
 			return drv1;
 		}
 	}
-fprintf(stderr, "%s:%u: protocol '%s', NULL\n", __FUNCTION__, __LINE__, protocol);
+#ifdef DEBUG_X49GP_BLOCK
+	fprintf(stderr, "%s:%u: protocol '%s', NULL\n",
+		__FUNCTION__, __LINE__, protocol);
+#endif
 	return NULL;
 }
 
@@ -276,8 +282,10 @@ bdrv_file_open(BlockDriverState **pbs, const char *filename, int flags)
 {
 	BlockDriverState *bs;
 	int ret;
-
-fprintf(stderr, "%s:%u: filename '%s'\n", __FUNCTION__, __LINE__, filename);
+#ifdef DEBUG_X49GP_BLOCK
+	fprintf(stderr, "%s:%u: filename '%s'\n",
+		__FUNCTION__, __LINE__, filename);
+#endif
 
 	bs = bdrv_new("");
 	if (!bs)
@@ -285,11 +293,16 @@ fprintf(stderr, "%s:%u: filename '%s'\n", __FUNCTION__, __LINE__, filename);
 	ret = bdrv_open(bs, filename, flags | BDRV_O_FILE);
 	if (ret < 0) {
 		bdrv_delete(bs);
-fprintf(stderr, "%s:%u: '%s': %d\n", __FUNCTION__, __LINE__, filename, ret);
+#ifdef DEBUG_X49GP_BLOCK
+		fprintf(stderr, "%s:%u: '%s': %d\n",
+			__FUNCTION__, __LINE__, filename, ret);
+#endif
 		return ret;
 	}
 	*pbs = bs;
-fprintf(stderr, "%s:%u: return 0\n", __FUNCTION__, __LINE__);
+#ifdef DEBUG_X49GP_BLOCK
+	fprintf(stderr, "%s:%u: return 0\n", __FUNCTION__, __LINE__);
+#endif
 	return 0;
 }
 
@@ -300,7 +313,10 @@ bdrv_open(BlockDriverState *bs, const char *filename, int flags)
 	char backing_filename[1024];
 	BlockDriver *drv = NULL;
 
-fprintf(stderr, "%s:%u: filename '%s'\n", __FUNCTION__, __LINE__, filename);
+#ifdef DEBUG_X49GP_BLOCK
+	fprintf(stderr, "%s:%u: filename '%s'\n",
+		__FUNCTION__, __LINE__, filename);
+#endif
 
 	bs->read_only = 0;
 	bs->is_temporary = 0;
@@ -310,24 +326,34 @@ fprintf(stderr, "%s:%u: filename '%s'\n", __FUNCTION__, __LINE__, filename);
 	if (flags & BDRV_O_FILE) {
 		drv = find_protocol(filename);
 		if (!drv) {
-fprintf(stderr, "%s:%u: drv: %p\n", __FUNCTION__, __LINE__, drv);
+#ifdef DEBUG_X49GP_BLOCK
+f			printf(stderr, "%s:%u: drv: %p\n",
+			       __FUNCTION__, __LINE__, drv);
+#endif
 			return -ENOENT;
 		}
 	} else {
 		if (!drv) {
 			drv = find_image_format(filename);
 			if (!drv) {
-fprintf(stderr, "%s:%u: drv: %p\n", __FUNCTION__, __LINE__, drv);
+#ifdef DEBUG_X49GP_BLOCK
+				fprintf(stderr, "%s:%u: drv: %p\n",
+					__FUNCTION__, __LINE__, drv);
+#endif
 				return -1;
 			}
 		}
 	}
 
-fprintf(stderr, "%s:%u: drv: %p\n", __FUNCTION__, __LINE__, drv);
+#ifdef DEBUG_X49GP_BLOCK
+	fprintf(stderr, "%s:%u: drv: %p\n", __FUNCTION__, __LINE__, drv);
+#endif
 	bs->drv = drv;
 	bs->opaque = qemu_mallocz(drv->instance_size);
 	if (bs->opaque == NULL && drv->instance_size > 0) {
-fprintf(stderr, "%s:%u: no opaque\n", __FUNCTION__, __LINE__);
+#ifdef DEBUG_X49GP_BLOCK
+		fprintf(stderr, "%s:%u: no opaque\n", __FUNCTION__, __LINE__);
+#endif
 		return -1;
 	}
 	/* Note: for compatibility, we open disk image files as RDWR, and
@@ -337,7 +363,10 @@ fprintf(stderr, "%s:%u: no opaque\n", __FUNCTION__, __LINE__);
 	else
 		open_flags = flags & ~(BDRV_O_FILE);
 	ret = drv->bdrv_open(bs, filename, open_flags);
-fprintf(stderr, "%s:%u: drv->bdrv_open: %d\n", __FUNCTION__, __LINE__, ret);
+#ifdef DEBUG_X49GP_BLOCK
+	fprintf(stderr, "%s:%u: drv->bdrv_open: %d\n",
+		__FUNCTION__, __LINE__, ret);
+#endif
 	if (ret == -EACCES && !(flags & BDRV_O_FILE)) {
 		ret = drv->bdrv_open(bs, filename, BDRV_O_RDONLY);
 		bs->read_only = 1;
@@ -346,7 +375,10 @@ fprintf(stderr, "%s:%u: drv->bdrv_open: %d\n", __FUNCTION__, __LINE__, ret);
 		qemu_free(bs->opaque);
 		bs->opaque = NULL;
 		bs->drv = NULL;
-fprintf(stderr, "%s:%u: return %d\n", __FUNCTION__, __LINE__, ret);
+#ifdef DEBUG_X49GP_BLOCK
+		fprintf(stderr, "%s:%u: return %d\n",
+			__FUNCTION__, __LINE__, ret);
+#endif
 		return ret;
 	}
 	if (drv->bdrv_getlength) {
@@ -363,15 +395,27 @@ fprintf(stderr, "%s:%u: return %d\n", __FUNCTION__, __LINE__, ret);
 		if (!bs->backing_hd) {
 	fail:
 			bdrv_close(bs);
-fprintf(stderr, "%s:%u: return -ENOMEM\n", __FUNCTION__, __LINE__);
+#ifdef DEBUG_X49GP_BLOCK
+			fprintf(stderr, "%s:%u: return -ENOMEM\n",
+				__FUNCTION__, __LINE__);
+#endif
 			return -ENOMEM;
 		}
-fprintf(stderr, "%s:%u: combine '%s' '%s'\n", __FUNCTION__, __LINE__, filename, bs->backing_file);
+#ifdef DEBUG_X49GP_BLOCK
+		fprintf(stderr, "%s:%u: combine '%s' '%s'\n",
+			__FUNCTION__, __LINE__, filename, bs->backing_file);
+#endif
 		path_combine(backing_filename, sizeof(backing_filename),
 			     filename, bs->backing_file);
-fprintf(stderr, "%s:%u: combine: '%s'\n", __FUNCTION__, __LINE__, backing_filename);
+#ifdef DEBUG_X49GP_BLOCK
+		fprintf(stderr, "%s:%u: combine: '%s'\n",
+			__FUNCTION__, __LINE__, backing_filename);
+#endif
 		if (bdrv_open(bs->backing_hd, backing_filename, 0) < 0) {
-fprintf(stderr, "%s:%u: backing fail\n", __FUNCTION__, __LINE__);
+#ifdef DEBUG_X49GP_BLOCK
+			fprintf(stderr, "%s:%u: backing fail\n",
+				__FUNCTION__, __LINE__);
+#endif
 			goto fail;
 		}
 	}
@@ -381,7 +425,9 @@ fprintf(stderr, "%s:%u: backing fail\n", __FUNCTION__, __LINE__);
 	if (bs->change_cb)
 		bs->change_cb(bs->change_opaque);
 
-fprintf(stderr, "%s:%u: return 0\n", __FUNCTION__, __LINE__);
+#ifdef DEBUG_X49GP_BLOCK
+	fprintf(stderr, "%s:%u: return 0\n", __FUNCTION__, __LINE__);
+#endif
 	return 0;
 }
 

@@ -13,11 +13,7 @@
 #include <x49gp.h>
 #include <s3c2410.h>
 
-#ifdef QEMU_OLD
-extern void tlb_flush(struct CPUState *, int global);
-#else
 #include "cpu-all.h"
-#endif
 
 static int
 s3c2410_arm_load(x49gp_module_t *module, GKeyFile *key)
@@ -75,15 +71,10 @@ s3c2410_arm_load(x49gp_module_t *module, GKeyFile *key)
 		error = -EAGAIN;
 	if (x49gp_module_get_u32(module, key, "VF", 0, &env->VF))
 		error = -EAGAIN;
-#ifdef QEMU_OLD
-	if (x49gp_module_get_u32(module, key, "NZF", 0, &env->NZF))
-		error = -EAGAIN;
-#else
 	if (x49gp_module_get_u32(module, key, "NF", 0, &env->NF))
 		error = -EAGAIN;
 	if (x49gp_module_get_u32(module, key, "ZF", 0, &env->ZF))
 		error = -EAGAIN;
-#endif
 	if (x49gp_module_get_u32(module, key, "QF", 0, &env->QF))
 		error = -EAGAIN;
 	if (x49gp_module_get_u32(module, key, "thumb", 0, &env->thumb))
@@ -95,10 +86,6 @@ s3c2410_arm_load(x49gp_module_t *module, GKeyFile *key)
 		error = -EAGAIN;
 	if (x49gp_module_get_u32(module, key, "cp15-c1-coproc", 0, &env->cp15.c1_coproc))
 		error = -EAGAIN;
-#ifdef QEMU_OLD
-	if (x49gp_module_get_u32(module, key, "cp15-c2", 0, &env->cp15.c2))
-		error = -EAGAIN;
-#else
 	if (x49gp_module_get_u32(module, key, "cp15-c2-base0", 0, &env->cp15.c2_base0))
 		error = -EAGAIN;
 	if (x49gp_module_get_u32(module, key, "cp15-c2-base1", 0, &env->cp15.c2_base1))
@@ -113,7 +100,6 @@ s3c2410_arm_load(x49gp_module_t *module, GKeyFile *key)
 		error = -EAGAIN;
 	if (x49gp_module_get_u32(module, key, "cp15-c2-insn", 0, &env->cp15.c2_insn))
 		error = -EAGAIN;
-#endif
 	if (x49gp_module_get_u32(module, key, "cp15-c3", 0, &env->cp15.c3))
 		error = -EAGAIN;
 	if (x49gp_module_get_u32(module, key, "cp15-c5-insn", 0, &env->cp15.c5_insn))
@@ -197,21 +183,14 @@ s3c2410_arm_save(x49gp_module_t *module, GKeyFile *key)
 
 	x49gp_module_set_u32(module, key, "CF", env->CF);
 	x49gp_module_set_u32(module, key, "VF", env->VF);
-#ifdef QEMU_OLD
-	x49gp_module_set_u32(module, key, "NZF", env->NZF);
-#else
 	x49gp_module_set_u32(module, key, "NF", env->NF);
 	x49gp_module_set_u32(module, key, "ZF", env->ZF);
-#endif
 	x49gp_module_set_u32(module, key, "QF", env->QF);
 	x49gp_module_set_int(module, key, "thumb", env->thumb);
 
 	x49gp_module_set_u32(module, key, "cp15-c0-cpuid", env->cp15.c0_cpuid);
 	x49gp_module_set_u32(module, key, "cp15-c1-sys", env->cp15.c1_sys);
 	x49gp_module_set_u32(module, key, "cp15-c1-coproc", env->cp15.c1_coproc);
-#ifdef QEMU_OLD
-	x49gp_module_set_u32(module, key, "cp15-c2", env->cp15.c2);
-#else
 	x49gp_module_set_u32(module, key, "cp15-c2-base0", env->cp15.c2_base0);
 	x49gp_module_set_u32(module, key, "cp15-c2-base1", env->cp15.c2_base1);
 	x49gp_module_set_u32(module, key, "cp15-c2-control", env->cp15.c2_control);
@@ -219,7 +198,6 @@ s3c2410_arm_save(x49gp_module_t *module, GKeyFile *key)
 	x49gp_module_set_u32(module, key, "cp15-c2-base-mask", env->cp15.c2_base_mask);
 	x49gp_module_set_u32(module, key, "cp15-c2-data", env->cp15.c2_data);
 	x49gp_module_set_u32(module, key, "cp15-c2-insn", env->cp15.c2_insn);
-#endif
 	x49gp_module_set_u32(module, key, "cp15-c3", env->cp15.c3);
 	x49gp_module_set_u32(module, key, "cp15-c5-insn", env->cp15.c5_insn);
 	x49gp_module_set_u32(module, key, "cp15-c5-data", env->cp15.c5_data);
@@ -261,10 +239,6 @@ s3c2410_arm_init(x49gp_module_t *module)
 
 #ifdef DEBUG_X49GP_MODULES
 	printf("%s: %s:%u\n", module->name, __FUNCTION__, __LINE__);
-#endif
-
-#ifdef QEMU_OLD
-	cpu_arm_set_model(x49gp->env, ARM_CPUID_ARM926);
 #endif
 
 	module->user_data = x49gp->env;

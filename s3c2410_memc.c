@@ -74,9 +74,6 @@ s3c2410_memc_read(void *opaque, target_phys_addr_t offset)
 	s3c2410_memc_t *memc = opaque;
 	s3c2410_offset_t *reg;
 
-#ifdef QEMU_OLD
-	offset -= S3C2410_MEMC_BASE;
-#endif
 	if (! S3C2410_OFFSET_OK(memc, offset)) {
 		return ~(0);
 	}
@@ -98,9 +95,6 @@ s3c2410_memc_write(void *opaque, target_phys_addr_t offset, uint32_t data)
 	s3c2410_memc_t *memc = opaque;
 	s3c2410_offset_t *reg;
 
-#ifdef QEMU_OLD
-	offset -= S3C2410_MEMC_BASE;
-#endif
 	if (! S3C2410_OFFSET_OK(memc, offset)) {
 		return;
 	}
@@ -230,14 +224,11 @@ s3c2410_memc_init(x49gp_module_t *module)
 	module->user_data = memc;
 	memc->x49gp = module->x49gp;
 
-#ifdef QEMU_OLD
-	iotype = cpu_register_io_memory(0, s3c2410_memc_readfn,
-					s3c2410_memc_writefn, memc);
-#else
 	iotype = cpu_register_io_memory(s3c2410_memc_readfn,
 					s3c2410_memc_writefn, memc);
+#ifdef DEBUG_S3C2410_MEMC
+	printf("%s: iotype %08x\n", __FUNCTION__, iotype);
 #endif
-printf("%s: iotype %08x\n", __FUNCTION__, iotype);
 	cpu_register_physical_memory(S3C2410_MEMC_BASE, S3C2410_MAP_SIZE, iotype);
 	return 0;
 }

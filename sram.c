@@ -18,6 +18,7 @@
 typedef struct {
 	void		*data;
 	void		*shadow;
+	char		*filename;
 	int		fd;
 	size_t		size;
 	uint32_t	offset;
@@ -386,9 +387,6 @@ sram_get_word(void *opaque, target_phys_addr_t offset)
 	x49gp_sram_t *sram = opaque;
 	uint32_t data;
 
-#ifdef QEMU_OLD
-	offset -= (target_phys_addr_t)phys_ram_base + sram->offset;
-#endif
 	data = ldl_p(sram->data + offset);
 
 #if 0
@@ -422,9 +420,6 @@ sram_get_halfword(void *opaque, target_phys_addr_t offset)
 	x49gp_sram_t *sram = opaque;
 	unsigned short data;
 
-#ifdef QEMU_OLD
-	offset -= (target_phys_addr_t)phys_ram_base + sram->offset;
-#endif
 	data = lduw_p(sram->data + offset);
 
 #ifdef DEBUG_X49GP_SYSRAM_READ
@@ -452,9 +447,6 @@ sram_get_byte(void *opaque, target_phys_addr_t offset)
 	x49gp_sram_t *sram = opaque;
 	unsigned char data;
 
-#ifdef QEMU_OLD
-	offset -= (target_phys_addr_t)phys_ram_base + sram->offset;
-#endif
 	data = ldub_p(sram->data + offset);
 
 #ifdef DEBUG_X49GP_SYSRAM_READ
@@ -480,10 +472,6 @@ static void
 sram_put_word(void *opaque, target_phys_addr_t offset, uint32_t data)
 {
 	x49gp_sram_t *sram = opaque;
-
-#ifdef QEMU_OLD
-	offset -= (target_phys_addr_t)phys_ram_base + sram->offset;
-#endif
 
 	if (offset == 0x00000a1c) {
 		printf("write SRAM 4 at offset %08x: %08x (pc %08x)\n",
@@ -531,9 +519,6 @@ sram_put_halfword(void *opaque, target_phys_addr_t offset, uint32_t data)
 {
 	x49gp_sram_t *sram = opaque;
 
-#ifdef QEMU_OLD
-	offset -= (target_phys_addr_t)phys_ram_base + sram->offset;
-#endif
 	data &= 0xffff;
 
 #ifdef DEBUG_X49GP_SYSRAM_WRITE
@@ -560,9 +545,6 @@ sram_put_byte(void *opaque, target_phys_addr_t offset, uint32_t data)
 {
 	x49gp_sram_t *sram = opaque;
 
-#ifdef QEMU_OLD
-	offset -= (target_phys_addr_t)phys_ram_base + sram->offset;
-#endif
 	data &= 0xff;
 
 #ifdef DEBUG_X49GP_SYSRAM_WRITE
@@ -611,14 +593,10 @@ sram_load(x49gp_module_t *module, GKeyFile *key)
 	printf("%s: %s:%u\n", module->name, __FUNCTION__, __LINE__);
 #endif
 
-	filename = x49gp_module_get_filename(module, key, "filename");
-	if (NULL == filename) {
-		fprintf(stderr, "%s: %s:%u: key \"filename\" not found\n",
-			module->name, __FUNCTION__, __LINE__);
-		return -ENOENT;
-	}
+	error = x49gp_module_get_filename(module, key, "filename", "sram",
+					  &(sram->filename), &filename);
 
-	sram->fd = open(filename, O_RDWR);
+	sram->fd = open(filename, O_RDWR | O_CREAT, 0644);
 	if (sram->fd < 0) {
 		error = -errno;
 		fprintf(stderr, "%s: %s:%u: open %s: %s\n",
@@ -629,6 +607,16 @@ sram_load(x49gp_module_t *module, GKeyFile *key)
 	}
 
 	sram->size = 0x00080000;
+	if (ftruncate(sram->fd, sram->size) < 0) {
+		error = -errno;
+		fprintf(stderr, "%s: %s:%u: ftruncate %s: %s\n",
+			module->name, __FUNCTION__, __LINE__,
+			filename, strerror(errno));
+		g_free(filename);
+		close(sram->fd);
+		sram->fd = -1;
+		return error;
+	}
 
 	sram->data = mmap(phys_ram_base + sram->offset, sram->size,
 			  PROT_READ | PROT_WRITE, MAP_SHARED | MAP_FIXED,
@@ -662,7 +650,7 @@ sram_load(x49gp_module_t *module, GKeyFile *key)
 	sram->x49gp->sram = phys_ram_base + sram->offset;
 
 	g_free(filename);
-	return 0;
+	return error;
 }
 
 static int
@@ -674,6 +662,8 @@ sram_save(x49gp_module_t *module, GKeyFile *key)
 #ifdef DEBUG_X49GP_MODULES
 	printf("%s: %s:%u\n", module->name, __FUNCTION__, __LINE__);
 #endif
+
+	x49gp_module_set_filename(module, key, "filename", sram->filename);
 
 	error = msync(sram->data, sram->size, MS_ASYNC);
 	if (error) {

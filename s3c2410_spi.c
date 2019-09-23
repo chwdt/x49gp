@@ -74,9 +74,6 @@ s3c2410_spi_read(void *opaque, target_phys_addr_t offset)
 	s3c2410_spi_t *spi = opaque;
 	s3c2410_offset_t *reg;
 
-#ifdef QEMU_OLD
-	offset -= S3C2410_SPI_BASE;
-#endif
 	if (! S3C2410_OFFSET_OK(spi, offset)) {
 		return ~(0);
 	}
@@ -109,9 +106,6 @@ s3c2410_spi_write(void *opaque, target_phys_addr_t offset, uint32_t data)
 	x49gp_t *x49gp = spi->x49gp;
 	s3c2410_offset_t *reg;
 
-#ifdef QEMU_OLD
-	offset -= S3C2410_SPI_BASE;
-#endif
 	if (! S3C2410_OFFSET_OK(spi, offset)) {
 		return;
 	}
@@ -249,14 +243,11 @@ s3c2410_spi_init(x49gp_module_t *module)
 	module->user_data = spi;
 	spi->x49gp = module->x49gp;
 
-#ifdef QEMU_OLD
-	iotype = cpu_register_io_memory(0, s3c2410_spi_readfn,
-					s3c2410_spi_writefn, spi);
-#else
 	iotype = cpu_register_io_memory(s3c2410_spi_readfn,
 					s3c2410_spi_writefn, spi);
+#ifdef DEBUG_S3C2410_SPI
+	printf("%s: iotype %08x\n", __FUNCTION__, iotype);
 #endif
-printf("%s: iotype %08x\n", __FUNCTION__, iotype);
 	cpu_register_physical_memory(S3C2410_SPI_BASE, S3C2410_MAP_SIZE, iotype);
 	return 0;
 }

@@ -191,9 +191,6 @@ s3c2410_io_port_read(void *opaque, target_phys_addr_t offset)
 	s3c2410_io_port_t *io = opaque;
 	s3c2410_offset_t *reg;
 
-#ifdef QEMU_OLD
-	offset -= S3C2410_IO_PORT_BASE;
-#endif
 	if (! S3C2410_OFFSET_OK(io, offset)) {
 		fprintf(stderr, "%s:%u: offset %08lx not OK\n", __FUNCTION__, __LINE__, (unsigned long) offset);
 		abort();
@@ -248,8 +245,7 @@ s3c2410_io_port_read(void *opaque, target_phys_addr_t offset)
 		break;
 
 	case S3C2410_IO_PORT_GPGDAT:
-		*(reg->datap) = s3c2410_scan_keys(io->x49gp, io->gpgcon, *(reg->datap));
-		break;
+		return s3c2410_scan_keys(io->x49gp, io->gpgcon, io->gpgdat);
 
 	case S3C2410_IO_PORT_GPHDAT:
 		if (0 == ((io->gphcon >> 14) & 3)) {
@@ -278,9 +274,6 @@ s3c2410_io_port_write(void *opaque, target_phys_addr_t offset, uint32_t data)
 	uint32_t change;
 static uint32_t lcd_data = 0;
 
-#ifdef QEMU_OLD
-	offset -= S3C2410_IO_PORT_BASE;
-#endif
 	if (! S3C2410_OFFSET_OK(io, offset)) {
 		return;
 	}
@@ -356,111 +349,87 @@ static uint32_t lcd_data = 0;
 }
 
 void
-s3c2410_io_port_g_set_bit(x49gp_t *x49gp, int n, uint32_t set)
+s3c2410_io_port_g_update(x49gp_t *x49gp, int column, int row, unsigned char columnbit, unsigned char rowbit, uint32_t new_state)
 {
 	s3c2410_io_port_t *io = x49gp->s3c2410_io_port;
-	uint32_t value, change;
-	int pending;
-#ifdef DEBUG_S3C2410_IO_PORT
-	int level = 0;
-#endif
+    uint32_t oldvalue, newvalue, change;
+    int n;
 
-	if (n > 7)
-		return;
+    oldvalue = s3c2410_scan_keys(x49gp, io->gpgcon, io->gpgdat);
 
-//	g_mutex_lock(x49gp->memlock);
+	if (new_state) {
+		x49gp->keybycol[column] |= rowbit;
+		x49gp->keybyrow[row] |= columnbit;
 
-	io->gpgdat = s3c2410_scan_keys(x49gp, io->gpgcon, io->gpgdat);
-
-#ifdef DEBUG_S3C2410_IO_PORT
-	printf("IO_PORT: %s GPG bit %u\n", set ? "assert" : "deassert", n);
-	printf("IO_PORT: GPGCON %08x, GPGDAT %08x\n", io->gpgcon, io->gpgdat);
-#endif
-
-	if (0 == set) {
-		value = 1;
 	} else {
-		if ((((io->gpgcon >> (2 * (n + 8))) & 3) == 1) &&
-		    (((io->gpgdat >> (n + 8)) & 1) == 0)) {
-			value = 0;
-		} else {
-			value = 1;
-		}
+		x49gp->keybycol[column] &= ~rowbit;
+		x49gp->keybyrow[row] &= ~columnbit;
 	}
 
-#ifdef DEBUG_S3C2410_IO_PORT
-	printf("IO_PORT: GPG bit %u value: %u\n", n, value);
-#endif
+	newvalue = s3c2410_scan_keys(x49gp, io->gpgcon, io->gpgdat);
+    change=newvalue^oldvalue;
 
-	change = 0;
+
+    for(n=0;n<15;++n) {
+
 	switch ((io->gpgcon >> (2 * n)) & 3) {
-	case 0:	/* Input */
-		io->gpgdat &= ~(1 << n);
-		io->gpgdat |= (value << n);
-		goto out;
 
 	case 2: /* Interrupt */
-		change = io->gpgdat ^ (value << n);
-		io->gpgdat &= ~(1 << n);
-		io->gpgdat |= (value << n);
+    {
+        switch (n+8<=15 ?
+            (io->extint1 >> (4 * n)) & 7 : // EINT 8-15
+            (io->extint2 >> (4 * (n-8))) & 7 // EINT 16-23
+            ) {
+        case 0:	/* Low Level */
+            if (!(newvalue & (1 << n)))
+            {
+                io->eintpend |= 1 << (n + 8);
+                if (io->eintpend & ~(io->eintmask))
+                    s3c2410_intc_assert(x49gp, EINT8_23, 1);
+            }
+            break;
+        case 1:	/* High Level */
+            if (newvalue & (1 << n)) {
+                    io->eintpend |= 1 << (n + 8);
+                    if (io->eintpend & ~(io->eintmask))
+                        s3c2410_intc_assert(x49gp, EINT8_23, 1);
+                }
+            break;
+        case 2:	/* Falling Edge */
+        case 3:
+            if ((change & (1 << n)) && !(newvalue & (1 << n))) {
+                io->eintpend |= 1 << (n + 8);
+                if (io->eintpend & ~(io->eintmask))
+                    s3c2410_intc_assert(x49gp, EINT8_23, 1);
+            }
+            break;
+        case 4:	/* Rising Edge */
+        case 5:
+            if ((change & (1 << n)) && (newvalue & (1 << n))) {
+                io->eintpend |= 1 << (n + 8);
+                if (io->eintpend & ~(io->eintmask))
+                    s3c2410_intc_assert(x49gp, EINT8_23, 1);
+            }
+            break;
+        case 6:	/* Any Edge */
+        case 7:
+            if (change & (1 << n)) {
+                io->eintpend |= 1 << (n + 8);
+                if (io->eintpend & ~(io->eintmask))
+                    s3c2410_intc_assert(x49gp, EINT8_23, 1);
+            }
 		break;
 
-	case 1: /* Output */
+        }
+    }
+    break;
+    case 0:	/* Input */
+    case 1: /* Output */
 	case 3: /* Reserved */
-		goto out;
-	}
-
-#ifdef DEBUG_S3C2410_IO_PORT
-	printf("IO_PORT: GPGDAT %08x, change %08x\n", io->gpgdat, change);
-#endif
-
-	pending = -1;
-
-	switch ((io->extint1 >> (4 * n)) & 7) {
-	case 0:	/* Low Level */
-		if (!(io->gpgdat & (1 << n)))
-			pending = n;
-#ifdef DEBUG_S3C2410_IO_PORT
-		level = 1;
-#endif
-		break;
-	case 1:	/* High Level */
-		if (io->gpgdat & (1 << n))
-			pending = n;
-#ifdef DEBUG_S3C2410_IO_PORT
-		level = 1;
-#endif
-		break;
-	case 2:	/* Falling Edge */
-	case 3:
-		if ((change & (1 << n)) && !(io->gpgdat & (1 << n)))
-			pending = n;
-		break;
-	case 4:	/* Rising Edge */
-	case 5:
-		if ((change & (1 << n)) && (io->gpgdat & (1 << n)))
-			pending = n;
-		break;
-	case 6:	/* Any Edge */
-	case 7:
-		if (change & (1 << n))
-			pending = n;
 		break;
 	}
 
-#ifdef DEBUG_S3C2410_IO_PORT
-	printf("IO_PORT: IRQ: %d, (Level %u)\n", pending, level);
-#endif
-
-	if (-1 == pending)
-		goto out;
-
-	io->eintpend |= 1 << (n + 8);
-	if (io->eintpend & ~(io->eintmask))
-		s3c2410_intc_assert(x49gp, EINT8_23, 1);
-
-out:
-//	g_mutex_unlock(x49gp->memlock);
+    }
 
 	return;
 }
@@ -681,14 +650,11 @@ s3c2410_io_port_init(x49gp_module_t *module)
 	module->x49gp->s3c2410_io_port = io;
 	io->x49gp = module->x49gp;
 
-#ifdef QEMU_OLD
-	iotype = cpu_register_io_memory(0, s3c2410_io_port_readfn,
-					s3c2410_io_port_writefn, io);
-#else
 	iotype = cpu_register_io_memory(s3c2410_io_port_readfn,
 					s3c2410_io_port_writefn, io);
+#ifdef DEBUG_S3C2410_IO_PORT
+	printf("%s: iotype %08x\n", __FUNCTION__, iotype);
 #endif
-printf("%s: iotype %08x\n", __FUNCTION__, iotype);
 	cpu_register_physical_memory(S3C2410_IO_PORT_BASE, S3C2410_MAP_SIZE, iotype);
 	return 0;
 }

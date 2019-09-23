@@ -59,9 +59,6 @@ s3c2410_nand_read(void *opaque, target_phys_addr_t offset)
 	s3c2410_nand_t *nand = opaque;
 	s3c2410_offset_t *reg;
 
-#ifdef QEMU_OLD
-	offset -= S3C2410_NAND_BASE;
-#endif
 	if (! S3C2410_OFFSET_OK(nand, offset)) {
 		return ~(0);
 	}
@@ -83,9 +80,6 @@ s3c2410_nand_write(void *opaque, target_phys_addr_t offset, uint32_t data)
 	s3c2410_nand_t *nand = opaque;
 	s3c2410_offset_t *reg;
 
-#ifdef QEMU_OLD
-	offset -= S3C2410_NAND_BASE;
-#endif
 	if (! S3C2410_OFFSET_OK(nand, offset)) {
 		return;
 	}
@@ -211,14 +205,11 @@ s3c2410_nand_init(x49gp_module_t *module)
 
 	module->user_data = nand;
 
-#ifdef QEMU_OLD
-	iotype = cpu_register_io_memory(0, s3c2410_nand_readfn,
-					s3c2410_nand_writefn, nand);
-#else
 	iotype = cpu_register_io_memory(s3c2410_nand_readfn,
 					s3c2410_nand_writefn, nand);
+#ifdef DEBUG_S3C2410_NAND
+	printf("%s: iotype %08x\n", __FUNCTION__, iotype);
 #endif
-printf("%s: iotype %08x\n", __FUNCTION__, iotype);
 	cpu_register_physical_memory(S3C2410_NAND_BASE, S3C2410_MAP_SIZE, iotype);
 	return 0;
 }

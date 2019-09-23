@@ -15,6 +15,7 @@
 
 typedef struct {
 	void		*data;
+	char		*filename;
 	int		fd;
 	uint32_t	offset;
 	size_t		size;
@@ -31,14 +32,11 @@ s3c2410_sram_load(x49gp_module_t *module, GKeyFile *key)
 	printf("%s: %s:%u\n", module->name, __FUNCTION__, __LINE__);
 #endif
 
-	filename = x49gp_module_get_filename(module, key, "filename");
-	if (NULL == filename) {
-		fprintf(stderr, "%s: %s:%u: key \"filename\" not found\n",
-			module->name, __FUNCTION__, __LINE__);
-		return -ENOENT;
-	}
+	error = x49gp_module_get_filename(module, key, "filename",
+					  "s3c2410-sram", &(filemap->filename),
+					  &filename);
 
-	filemap->fd = open(filename, O_RDWR);
+	filemap->fd = open(filename, O_RDWR | O_CREAT, 0644);
 	if (filemap->fd < 0) {
 		error = -errno;
 		fprintf(stderr, "%s: %s:%u: open %s: %s\n",
@@ -48,7 +46,19 @@ s3c2410_sram_load(x49gp_module_t *module, GKeyFile *key)
 		return error;
 	}
 
-	filemap->data = mmap(phys_ram_base + filemap->offset, S3C2410_SRAM_SIZE,
+	filemap->size = S3C2410_SRAM_SIZE;
+	if (ftruncate(filemap->fd, filemap->size) < 0) {
+		error = -errno;
+		fprintf(stderr, "%s: %s:%u: ftruncate %s: %s\n",
+			module->name, __FUNCTION__, __LINE__,
+			filename, strerror(errno));
+		g_free(filename);
+		close(filemap->fd);
+		filemap->fd = -1;
+		return error;
+	}
+
+	filemap->data = mmap(phys_ram_base + filemap->offset, filemap->size,
 			     PROT_READ | PROT_WRITE, MAP_SHARED | MAP_FIXED,
 			     filemap->fd, 0);
 	if (filemap->data == (void *) -1) {
@@ -61,12 +71,11 @@ s3c2410_sram_load(x49gp_module_t *module, GKeyFile *key)
 		filemap->fd = -1;
 		return error;
 	}
-	filemap->size = S3C2410_SRAM_SIZE;
 
 	g_free(filename);
 
 	x49gp_schedule_lcd_update(module->x49gp);
-	return 0;
+	return error;
 }
 
 static int
@@ -78,6 +87,8 @@ s3c2410_sram_save(x49gp_module_t *module, GKeyFile *key)
 #ifdef DEBUG_X49GP_MODULES
 	printf("%s: %s:%u\n", module->name, __FUNCTION__, __LINE__);
 #endif
+
+	x49gp_module_set_filename(module, key, "filename", filemap->filename);
 
 	error = msync(filemap->data, filemap->size, MS_ASYNC);
 	if (error) {

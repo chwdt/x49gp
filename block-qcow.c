@@ -21,12 +21,8 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
  */
-#ifdef QEMU_OLD
-#include "vl.h"
-#else
 #include "qemu-common.h"
 #include "block.h"
-#endif
 #include "block_int.h"
 #include <zlib.h>
 #if 0
@@ -440,6 +436,7 @@ static int qcow_create(const char *filename, int64_t total_size,
     int fd, header_size, backing_filename_len, l1_size, i, shift;
     QCowHeader header;
     uint64_t tmp;
+	int ret;
 
     fd = open(filename, O_WRONLY | O_CREAT | O_TRUNC | O_BINARY, 0644);
     if (fd < 0)
@@ -475,17 +472,33 @@ static int qcow_create(const char *filename, int64_t total_size,
     }
     
     /* write all the data */
-    write(fd, &header, sizeof(header));
+    ret = write(fd, &header, sizeof(header));
+    if (ret != sizeof(header)) {
+        ret = -1;
+        goto exit;
+    }
+
     if (backing_file) {
-        write(fd, backing_file, backing_filename_len);
+        ret = write(fd, backing_file, backing_filename_len);
+        if (ret != backing_filename_len) {
+            ret = -1;
+            goto exit;
+        }
     }
     lseek(fd, header_size, SEEK_SET);
     tmp = 0;
     for(i = 0;i < l1_size; i++) {
-        write(fd, &tmp, sizeof(tmp));
+        ret = write(fd, &tmp, sizeof(tmp));
+        if (ret != sizeof(tmp)) {
+            ret = -1;
+            goto exit;
+        }
     }
+
+    ret = 0;
+exit:
     close(fd);
-    return 0;
+    return ret;
 }
 
 static int qcow_make_empty(BlockDriverState *bs)

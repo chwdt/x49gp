@@ -110,7 +110,7 @@ x49gp_get_pixel_color(s3c2410_lcd_t *lcd, int x, int y)
 		case 1:
 			return 15 * data;
 		case 2:
-			return 15 & (lcd->bluelut >> (2 * data));
+			return 15 & (lcd->bluelut >> (4 * data));
 		default:
 			return data;
 	}
@@ -122,6 +122,7 @@ x49gp_lcd_update(x49gp_t *x49gp)
 	x49gp_ui_t *ui = x49gp->ui;
 	s3c2410_lcd_t *lcd = x49gp->s3c2410_lcd;
 	GdkRectangle rect;
+	GdkGC *gc;
 	int color, x, y;
 
 	if (!(lcd->lcdcon1 & 1)) {
@@ -161,15 +162,18 @@ x49gp_lcd_update(x49gp_t *x49gp)
 	gdk_gc_set_rgb_fg_color(ui->ann_busy_gc, &(ui->colors[UI_COLOR_GRAYSCALE_0 + color]));
 	gdk_draw_rectangle(ui->lcd_pixmap, ui->ann_busy_gc, TRUE, 191, 0, 15, 12);
 
+	gc = gdk_gc_new(ui->lcd_canvas->window);
+
 	for (y = 0; y < (ui->lcd_height - ui->lcd_top_margin) / 2; y++) {
 		for (x = 0; x < ui->lcd_width / 2; x++) {
 			color = x49gp_get_pixel_color(lcd, x, y);
-			gdk_gc_set_rgb_fg_color(ui->window->style->fg_gc[0],
-								  &(ui->colors[UI_COLOR_GRAYSCALE_0 + color]));
-			gdk_draw_rectangle(ui->lcd_pixmap, ui->window->style->fg_gc[0], TRUE,
-							   2 * x, 2 * y + ui->lcd_top_margin, 2, 2);
+			gdk_gc_set_rgb_fg_color(gc, &(ui->colors[UI_COLOR_GRAYSCALE_0 + color]));
+			gdk_draw_rectangle(ui->lcd_pixmap, gc, TRUE,
+					   2 * x, 2 * y + ui->lcd_top_margin, 2, 2);
 		}
 	}
+
+	g_object_unref(gc);
 
 done:
 	rect.x = 0;
@@ -188,9 +192,6 @@ s3c2410_lcd_read(void *opaque, target_phys_addr_t offset)
 	s3c2410_offset_t *reg;
 	uint32_t linecnt;
 
-#ifdef QEMU_OLD
-	offset -= S3C2410_LCD_BASE;
-#endif
 	if (! S3C2410_OFFSET_OK(lcd, offset)) {
 		return ~(0);
 	}
@@ -226,9 +227,6 @@ s3c2410_lcd_write(void *opaque, target_phys_addr_t offset, uint32_t data)
 	x49gp_t *x49gp = lcd->x49gp;
 	s3c2410_offset_t *reg;
 
-#ifdef QEMU_OLD
-	offset -= S3C2410_LCD_BASE;
-#endif
 	if (! S3C2410_OFFSET_OK(lcd, offset)) {
 		return;
 	}
@@ -368,14 +366,11 @@ s3c2410_lcd_init(x49gp_module_t *module)
 	module->x49gp->s3c2410_lcd = lcd;
 	lcd->x49gp = module->x49gp;
 
-#ifdef QEMU_OLD
-	iotype = cpu_register_io_memory(0, s3c2410_lcd_readfn,
-					s3c2410_lcd_writefn, lcd);
-#else
 	iotype = cpu_register_io_memory(s3c2410_lcd_readfn,
 					s3c2410_lcd_writefn, lcd);
+#ifdef DEBUG_S3C2410_LCD
+	printf("%s: iotype %08x\n", __FUNCTION__, iotype);
 #endif
-printf("%s: iotype %08x\n", __FUNCTION__, iotype);
 	cpu_register_physical_memory(S3C2410_LCD_BASE, S3C2410_MAP_SIZE, iotype);
 	return 0;
 }

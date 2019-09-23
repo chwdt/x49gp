@@ -11,6 +11,7 @@
 #include <sys/times.h>
 #include <math.h>
 #include <errno.h>
+#include <arpa/inet.h> /* For ntohl() */
 
 #include <gtk/gtk.h>
 #include <glib.h>
@@ -23,6 +24,8 @@
 #include <bitmap_font.h>
 #include <symbol.h>
 #include <glyphname.h>
+
+#include "gdbstub.h"
 
 #include <gdk/gdkkeysyms.h>
 
@@ -368,6 +371,342 @@ static const x49gp_ui_key_t x49gp_ui_keys[] =
 };
 #define X49GP_UI_NR_KEYS (sizeof(x49gp_ui_keys) / sizeof(x49gp_ui_keys[0]))
 
+static const x49gp_ui_key_t x49gp_newrpl_ui_keys[] =
+{
+    {
+        "F1",	"A",	NULL,	NULL,	NULL,
+        UI_COLOR_BLACK,	12.0, CAIRO_FONT_WEIGHT_BOLD,
+        UI_SHAPE_BUTTON_TINY, 12.0, UI_LAYOUT_LEFT,
+          0,   0, 36, 22, 5, 1, (1 << 5), (1 << 1), 1
+    },
+    {
+        "F2",	"B",	NULL,	NULL,	NULL,
+        UI_COLOR_BLACK,	12.0, CAIRO_FONT_WEIGHT_BOLD,
+        UI_SHAPE_BUTTON_TINY, 12.0, UI_LAYOUT_LEFT,
+         50,   0, 36, 22, 5, 2, (1 << 5), (1 << 2), 2
+    },
+    {
+        "F3",	"C",	NULL,	NULL,	NULL,
+        UI_COLOR_BLACK,	12.0, CAIRO_FONT_WEIGHT_BOLD,
+        UI_SHAPE_BUTTON_TINY, 12.0, UI_LAYOUT_LEFT,
+         99,   0, 36, 22, 5, 3, (1 << 5), (1 << 3), 3
+    },
+    {
+        "F4",	"D",	NULL,	NULL,	NULL,
+        UI_COLOR_BLACK,	12.0, CAIRO_FONT_WEIGHT_BOLD,
+        UI_SHAPE_BUTTON_TINY, 12.0, UI_LAYOUT_LEFT,
+        149,   0, 36, 22, 5, 4, (1 << 5), (1 << 4), 4
+    },
+    {
+        "F5",	"E",	NULL,	NULL,	NULL,
+        UI_COLOR_BLACK,	12.0, CAIRO_FONT_WEIGHT_BOLD,
+        UI_SHAPE_BUTTON_TINY, 12.0, UI_LAYOUT_LEFT,
+        198,   0, 36, 22, 5, 5, (1 << 5), (1 << 5), 5
+    },
+    {
+        "F6",	"F",	NULL,	NULL,	NULL,
+        UI_COLOR_BLACK,	12.0, CAIRO_FONT_WEIGHT_BOLD,
+        UI_SHAPE_BUTTON_TINY, 12.0, UI_LAYOUT_LEFT,
+        247,   0, 36, 22, 5, 6, (1 << 5), (1 << 6), 6
+    },
+    {
+        "",	"G",	NULL,	NULL,	NULL,
+        UI_COLOR_WHITE, 10.0, CAIRO_FONT_WEIGHT_BOLD,
+        UI_SHAPE_BUTTON_SMALL, 10.0, UI_LAYOUT_BELOW,
+          0,  44, 36, 28, 5, 7, (1 << 5), (1 << 7), 7
+    },
+    {
+        "",	"H",	NULL,	NULL,	NULL,
+        UI_COLOR_WHITE, 10.0, CAIRO_FONT_WEIGHT_BOLD,
+        UI_SHAPE_BUTTON_SMALL, 10.0, UI_LAYOUT_BELOW,
+         50,  44, 36, 28, 6, 5, (1 << 6), (1 << 5), 5
+    },
+    {
+        "",	"I",	NULL,	NULL,	NULL,
+        UI_COLOR_WHITE, 10.0, CAIRO_FONT_WEIGHT_BOLD,
+        UI_SHAPE_BUTTON_SMALL, 10.0, UI_LAYOUT_BELOW,
+         99,  44, 36, 28, 6, 6, (1 << 6), (1 << 6), 6
+    },
+    {
+        "",	"J",	NULL,	NULL,	NULL,
+        UI_COLOR_WHITE, 10.0, CAIRO_FONT_WEIGHT_BOLD,
+        UI_SHAPE_BUTTON_SMALL, 10.0, UI_LAYOUT_BELOW,
+          0,  92, 36, 28, 6, 7, (1 << 6), (1 << 7), 7
+    },
+    {
+        "",	"K",	NULL,	NULL,	NULL,
+        UI_COLOR_WHITE, 10.0, CAIRO_FONT_WEIGHT_BOLD,
+        UI_SHAPE_BUTTON_SMALL, 10.0, UI_LAYOUT_BELOW,
+         50,  92, 36, 28, 7, 1, (1 << 7), (1 << 1), 1
+    },
+    {
+        "",	"L",	NULL,	NULL,	NULL,
+        UI_COLOR_WHITE, 10.0, CAIRO_FONT_WEIGHT_BOLD,
+        UI_SHAPE_BUTTON_SMALL, 10.0, UI_LAYOUT_BELOW,
+         99,  92, 36, 28, 7, 2, (1 << 7), (1 << 2), 2
+    },
+    {
+        "", "",	"UPDIR",	NULL,	NULL,
+        UI_COLOR_SILVER, 10.0, CAIRO_FONT_WEIGHT_BOLD,
+        UI_SHAPE_BUTTON_ROUND, 0.0, 0,
+        200,  38, 33, 33, 6, 1, (1 << 6), (1 << 1), 1
+    },
+    {
+        "",	"",	"BEG COPY",	NULL,	NULL,
+        UI_COLOR_SILVER, 10.0, CAIRO_FONT_WEIGHT_BOLD,
+        UI_SHAPE_BUTTON_ROUND, 0.0, 0,
+        164,  66, 33, 33, 6, 2, (1 << 6), (1 << 2), 2
+    },
+    {
+        "",	"",	"CUT",	NULL,	NULL,
+        UI_COLOR_SILVER, 10.0, CAIRO_FONT_WEIGHT_BOLD,
+        UI_SHAPE_BUTTON_ROUND, 0.0, 0,
+        200,  94, 33, 33, 6, 3, (1 << 6), (1 << 3), 3
+    },
+    {
+        "",	"",	"END PASTE",	NULL,	NULL,
+        UI_COLOR_SILVER, 10.0, CAIRO_FONT_WEIGHT_BOLD,
+        UI_SHAPE_BUTTON_ROUND, 0.0, 0,
+        236,  66, 33, 33, 6, 4, (1 << 6), (1 << 4), 4
+    },
+    {
+        "S\\kern-1 T\\kern-1 O\\kern-1\\triangleright",	"M",	"RCL",	"PREV.M",	NULL,
+        UI_COLOR_WHITE, 12.0, CAIRO_FONT_WEIGHT_BOLD,
+        UI_SHAPE_BUTTON_NORMAL, 12.0, UI_LAYOUT_LEFT,
+          0, 141, 46, 28, 4, 1, (1 << 4), (1 << 1), 1
+    },
+    {
+        "EV\\kern-1 AL",	"N",	NULL,	NULL,	NULL,
+        UI_COLOR_WHITE, 12.0, CAIRO_FONT_WEIGHT_BOLD,
+        UI_SHAPE_BUTTON_NORMAL, 12.0, UI_LAYOUT_LEFT,
+         59, 141, 46, 28, 3, 1, (1 << 3), (1 << 1), 1
+    },
+    {
+        "\\tick",	"O",	NULL,	NULL,	NULL,
+        UI_COLOR_WHITE, 12.0, CAIRO_FONT_WEIGHT_BOLD,
+        UI_SHAPE_BUTTON_NORMAL, 12.0, UI_LAYOUT_LEFT,
+        119, 141, 46, 28, 2, 1, (1 << 2), (1 << 1), 1
+    },
+    {
+        "M\\kern-1 E\\kern-1 N\\kern-1 U",	"P",	NULL,	NULL,	NULL,
+        UI_COLOR_WHITE, 12.0, CAIRO_FONT_WEIGHT_BOLD,
+        UI_SHAPE_BUTTON_NORMAL, 12.0, UI_LAYOUT_LEFT,
+        179, 141, 46, 28, 1, 1, (1 << 1), (1 << 1), 1
+    },
+    {
+        "\\arrowleftdblfull",	NULL,	NULL, "CLEAR",	NULL,
+        UI_COLOR_WHITE, 12.0, CAIRO_FONT_WEIGHT_BOLD,
+        UI_SHAPE_BUTTON_NORMAL, 0.0, 0,
+        238, 141, 46, 28, 0, 1, (1 << 0), (1 << 1), 1
+    },
+    {
+        "Y\\super x\\/super",	"Q",	"\\math_e\\xsuperior",	"LN",	NULL,
+        UI_COLOR_WHITE, 12.0, CAIRO_FONT_WEIGHT_BOLD,
+        UI_SHAPE_BUTTON_NORMAL, 12.0, UI_LAYOUT_LEFT,
+          0, 183, 46, 28, 4, 2, (1 << 4), (1 << 2), 2
+    },
+    {
+        "\\radical\\overscore\\kern-7 X",	"R",
+        "\\math_x\\twosuperior",
+        "\\xsuperior\\kern-4\\math_radical\\overscore\\kern-5\\math_y",
+        NULL,
+        UI_COLOR_WHITE, 12.0, CAIRO_FONT_WEIGHT_BOLD,
+        UI_SHAPE_BUTTON_NORMAL, 12.0, UI_LAYOUT_LEFT,
+         59, 183, 46, 28, 3, 2, (1 << 3), (1 << 2), 2
+    },
+    {
+        "SIN",	"S",	"ASIN",	NULL,	NULL,
+        UI_COLOR_WHITE, 12.0, CAIRO_FONT_WEIGHT_BOLD,
+        UI_SHAPE_BUTTON_NORMAL, 12.0, UI_LAYOUT_LEFT,
+        119, 183, 46, 28, 2, 2, (1 << 2), (1 << 2), 2
+    },
+    {
+        "COS",	"T",	"ACOS",	NULL,	NULL,
+        UI_COLOR_WHITE, 12.0, CAIRO_FONT_WEIGHT_BOLD,
+        UI_SHAPE_BUTTON_NORMAL, 12.0, UI_LAYOUT_LEFT,
+        179, 183, 46, 28, 1, 2, (1 << 1), (1 << 2), 2
+    },
+    {
+        "TAN",	"U",	"ATAN",	NULL,	NULL,
+        UI_COLOR_WHITE, 12.0, CAIRO_FONT_WEIGHT_BOLD,
+        UI_SHAPE_BUTTON_NORMAL, 12.0, UI_LAYOUT_LEFT,
+        238, 183, 46, 28, 0, 2, (1 << 0), (1 << 2), 2
+    },
+    {
+        "EEX",	"V",	"10\\xsuperior",	"LOG",	NULL,
+        UI_COLOR_WHITE, 12.0, CAIRO_FONT_WEIGHT_BOLD,
+        UI_SHAPE_BUTTON_NORMAL, 12.0, UI_LAYOUT_LEFT,
+          0, 225, 46, 28, 4, 3, (1 << 4), (1 << 3), 3
+    },
+    {
+        "+\\divisionslash\\minus",	"W",
+        "\\math_notequal",
+        "\\math_equal",
+        NULL,
+        UI_COLOR_WHITE, 12.0, CAIRO_FONT_WEIGHT_BOLD,
+        UI_SHAPE_BUTTON_NORMAL, 12.0, UI_LAYOUT_LEFT,
+         59, 225, 46, 28, 3, 3, (1 << 3), (1 << 3), 3
+    },
+    {
+        "X",	"X",
+        "\\math_lessequal",
+        "\\math_less",
+        NULL,
+        UI_COLOR_WHITE, 12.0, CAIRO_FONT_WEIGHT_BOLD,
+        UI_SHAPE_BUTTON_NORMAL, 12.0, UI_LAYOUT_LEFT,
+        119, 225, 46, 28, 2, 3, (1 << 2), (1 << 3), 3
+    },
+    {
+        "1/X",	"Y",
+        "\\math_greaterequal",
+        "\\math_greater",
+        NULL,
+        UI_COLOR_WHITE, 12.0, CAIRO_FONT_WEIGHT_BOLD,
+        UI_SHAPE_BUTTON_NORMAL, 12.0, UI_LAYOUT_LEFT,
+        179, 225, 46, 28, 1, 3, (1 << 1), (1 << 3), 3
+    },
+    {
+        "\\divide",	"Z",	"ABS",	"ARG",	NULL,
+        UI_COLOR_WHITE, 19.0, CAIRO_FONT_WEIGHT_BOLD,
+        UI_SHAPE_BUTTON_NORMAL, 12.0, UI_LAYOUT_LEFT_NO_SPACE,
+        238, 225, 46, 28, 0, 3, (1 << 0), (1 << 3), 3
+    },
+    {
+        "ALPHA",	"",	"",	"ENTRY",	NULL,
+        UI_COLOR_BLACK, 12.0, CAIRO_FONT_WEIGHT_BOLD,
+        UI_SHAPE_BUTTON_LARGE, 0.0, 0,
+          0, 267, 46, 32, 0, 0,        0,        0, 4
+    },
+    {
+        "7",	"",	"",	"NUM.SLV",	NULL,
+        UI_COLOR_WHITE, 19.0, CAIRO_FONT_WEIGHT_BOLD,
+        UI_SHAPE_BUTTON_LARGE, 0.0, 0,
+         59, 267, 46, 32, 3, 4, (1 << 3), (1 << 4), 4
+    },
+    {
+        "8",	NULL,	NULL,	NULL,	NULL,
+        UI_COLOR_WHITE, 19.0, CAIRO_FONT_WEIGHT_BOLD,
+        UI_SHAPE_BUTTON_LARGE, 0.0, 0,
+        119, 267, 46, 32, 2, 4, (1 << 2), (1 << 4), 4
+    },
+    {
+        "9",	"",	"",	"TIME",	NULL,
+        UI_COLOR_WHITE, 19.0, CAIRO_FONT_WEIGHT_BOLD,
+        UI_SHAPE_BUTTON_LARGE, 0.0, 0,
+        179, 267, 46, 32, 1, 4, (1 << 1), (1 << 4), 4
+    },
+    {
+        "\\multiply",	NULL,	"[ ]",	"\" \"",	NULL,
+        UI_COLOR_WHITE, 19.0, CAIRO_FONT_WEIGHT_BOLD,
+        UI_SHAPE_BUTTON_LARGE, 0.0, 0,
+        238, 267, 46, 32, 0, 4, (1 << 0), (1 << 4), 4
+    },
+    {
+        "\\uparrowleft",	NULL,	NULL,	NULL,	NULL,
+        UI_COLOR_BLACK, 19.0, CAIRO_FONT_WEIGHT_BOLD,
+        UI_SHAPE_BUTTON_LARGE, 0.0, 0,
+          0, 313, 46, 32, 0, 0,        0,        0, 5
+    },
+    {
+        "4",	NULL,	NULL,	NULL,	NULL,
+        UI_COLOR_WHITE, 19.0, CAIRO_FONT_WEIGHT_BOLD,
+        UI_SHAPE_BUTTON_LARGE, 0.0, 0,
+         59, 313, 46, 32, 3, 5, (1 << 3), (1 << 5), 5
+    },
+    {
+        "5",	NULL,	NULL,	NULL,	NULL,
+        UI_COLOR_WHITE, 19.0, CAIRO_FONT_WEIGHT_BOLD,
+        UI_SHAPE_BUTTON_LARGE, 0.0, 0,
+        119, 313, 46, 32, 2, 5, (1 << 2), (1 << 5), 5
+    },
+    {
+        "6",	NULL,	"CONVERT",	"UNITS",	NULL,
+        UI_COLOR_WHITE, 19.0, CAIRO_FONT_WEIGHT_BOLD,
+        UI_SHAPE_BUTTON_LARGE, 0.0, 0,
+        179, 313, 46, 32, 1, 5, (1 << 1), (1 << 5), 5
+    },
+    {
+        "\\minus",	NULL,	"( )",	"_",	NULL,
+        UI_COLOR_WHITE, 19.0, CAIRO_FONT_WEIGHT_BOLD,
+        UI_SHAPE_BUTTON_LARGE, 0.0, 0,
+        238, 313, 46, 32, 0, 5, (1 << 0), (1 << 5), 5
+    },
+    {
+        "\\uparrowright",	NULL,	NULL,	NULL,	NULL,
+        UI_COLOR_BLACK, 19.0, CAIRO_FONT_WEIGHT_BOLD,
+        UI_SHAPE_BUTTON_LARGE, 0.0, 0,
+          0, 359, 46, 32, 0, 0,        0,        0, 6
+    },
+    {
+        "1",	"",	"ARITH",	"CMPLX",	NULL,
+        UI_COLOR_WHITE, 19.0, CAIRO_FONT_WEIGHT_BOLD,
+        UI_SHAPE_BUTTON_LARGE, 0.0, 0,
+         59, 359, 46, 32, 3, 6, (1 << 3), (1 << 6), 6
+    },
+    {
+        "2",	"",	"",	"LIB",	NULL,
+        UI_COLOR_WHITE, 19.0, CAIRO_FONT_WEIGHT_BOLD,
+        UI_SHAPE_BUTTON_LARGE, 0.0, 0,
+        119, 359, 46, 32, 2, 6, (1 << 2), (1 << 6), 6
+    },
+    {
+        "3",	NULL,	"\\math_numbersign",	"BASE",	NULL,
+        UI_COLOR_WHITE, 19.0, CAIRO_FONT_WEIGHT_BOLD,
+        UI_SHAPE_BUTTON_LARGE, 0.0, 0,
+        179, 359, 46, 32, 1, 6, (1 << 1), (1 << 6), 6
+    },
+    {
+        "+",	NULL,
+        "{ }",
+        "\\guillemotleft\\ \\guillemotright",
+        NULL,
+        UI_COLOR_WHITE, 19.0, CAIRO_FONT_WEIGHT_BOLD,
+        UI_SHAPE_BUTTON_LARGE, 0.0, 0,
+        238, 359, 46, 32, 0, 6, (1 << 0), (1 << 6), 6
+    },
+    {
+        "ON",	NULL,	NULL,	"OFF",	NULL,
+        UI_COLOR_WHITE, 12.0, CAIRO_FONT_WEIGHT_BOLD,
+        UI_SHAPE_BUTTON_LARGE, 0.0, 0,
+          0, 405, 46, 32, 0, 0,        0,        0, 0
+    },
+    {
+        "0",	NULL,
+        "\\math_infinity",
+        "\\math_arrowright",
+        NULL,
+        UI_COLOR_WHITE, 19.0, CAIRO_FONT_WEIGHT_BOLD,
+        UI_SHAPE_BUTTON_LARGE, 0.0, 0,
+         59, 405, 46, 32, 3, 7, (1 << 3), (1 << 7), 7
+    },
+    {
+        "\\bullet",	NULL,
+        ": :",
+        "\\math_downarrowleft",
+        NULL,
+        UI_COLOR_WHITE, 19.0, CAIRO_FONT_WEIGHT_BOLD,
+        UI_SHAPE_BUTTON_LARGE, 0.0, 0,
+        119, 405, 46, 32, 2, 7, (1 << 2), (1 << 7), 7
+    },
+    {
+        "SPC",	NULL,
+        "\\math_pi",
+        "\\large_comma",
+        NULL,
+        UI_COLOR_WHITE, 12.0, CAIRO_FONT_WEIGHT_BOLD,
+        UI_SHAPE_BUTTON_LARGE, 0.0, 0,
+        179, 405, 46, 32, 1, 7, (1 << 1), (1 << 7), 7
+    },
+    {
+        "ENTER",	NULL,	NULL,	"\\arrowright NUM",	NULL,
+        UI_COLOR_WHITE, 12.0, CAIRO_FONT_WEIGHT_BOLD,
+        UI_SHAPE_BUTTON_LARGE, 0.0, 0,
+        238, 405, 46, 32, 0, 7, (1 << 0), (1 << 7), 7
+    },
+};
+
+#define X49GP_NEWRPL_UI_NR_KEYS (sizeof(x49gp_newrpl_ui_keys) / sizeof(x49gp_newrpl_ui_keys[0]))
+
 static const x49gp_ui_key_t x50g_ui_keys[] =
 {
 	{
@@ -703,6 +1042,341 @@ static const x49gp_ui_key_t x50g_ui_keys[] =
 };
 #define X50G_UI_NR_KEYS (sizeof(x50g_ui_keys) / sizeof(x50g_ui_keys[0]))
 
+static const x49gp_ui_key_t x50g_newrpl_ui_keys[] =
+{
+	{
+		"F1",	"A",	NULL,	NULL,	NULL,
+		UI_COLOR_BLACK,	12.0, CAIRO_FONT_WEIGHT_BOLD,
+		UI_SHAPE_BUTTON_TINY, 12.0, UI_LAYOUT_LEFT,
+		  0,   0, 36, 22, 5, 1, (1 << 5), (1 << 1), 1
+	},
+	{
+		"F2",	"B",	NULL,	NULL,	NULL,
+		UI_COLOR_BLACK,	12.0, CAIRO_FONT_WEIGHT_BOLD,
+		UI_SHAPE_BUTTON_TINY, 12.0, UI_LAYOUT_LEFT,
+		 50,   0, 36, 22, 5, 2, (1 << 5), (1 << 2), 2
+	},
+	{
+		"F3",	"C",	NULL,	NULL,	NULL,
+		UI_COLOR_BLACK,	12.0, CAIRO_FONT_WEIGHT_BOLD,
+		UI_SHAPE_BUTTON_TINY, 12.0, UI_LAYOUT_LEFT,
+		 99,   0, 36, 22, 5, 3, (1 << 5), (1 << 3), 3
+	},
+	{
+		"F4",	"D",	NULL,	NULL,	NULL,
+		UI_COLOR_BLACK,	12.0, CAIRO_FONT_WEIGHT_BOLD,
+		UI_SHAPE_BUTTON_TINY, 12.0, UI_LAYOUT_LEFT,
+		149,   0, 36, 22, 5, 4, (1 << 5), (1 << 4), 4
+	},
+	{
+		"F5",	"E",	NULL,	NULL,	NULL,
+		UI_COLOR_BLACK,	12.0, CAIRO_FONT_WEIGHT_BOLD,
+		UI_SHAPE_BUTTON_TINY, 12.0, UI_LAYOUT_LEFT,
+		198,   0, 36, 22, 5, 5, (1 << 5), (1 << 5), 5
+	},
+	{
+		"F6",	"F",	NULL,	NULL,	NULL,
+		UI_COLOR_BLACK,	12.0, CAIRO_FONT_WEIGHT_BOLD,
+		UI_SHAPE_BUTTON_TINY, 12.0, UI_LAYOUT_LEFT,
+		247,   0, 36, 22, 5, 6, (1 << 5), (1 << 6), 6
+	},
+	{
+		"",	"G",	NULL,	NULL,	NULL,
+		UI_COLOR_WHITE, 10.0, CAIRO_FONT_WEIGHT_BOLD,
+		UI_SHAPE_BUTTON_SMALL, 10.0, UI_LAYOUT_BELOW,
+		  0,  44, 36, 28, 5, 7, (1 << 5), (1 << 7), 7
+	},
+	{
+		"",	"H",	NULL,	NULL,	NULL,
+		UI_COLOR_WHITE, 10.0, CAIRO_FONT_WEIGHT_BOLD,
+		UI_SHAPE_BUTTON_SMALL, 10.0, UI_LAYOUT_BELOW,
+		 50,  44, 36, 28, 6, 5, (1 << 6), (1 << 5), 5
+	},
+	{
+		"",	"I",	NULL,	NULL,	NULL,
+		UI_COLOR_WHITE, 10.0, CAIRO_FONT_WEIGHT_BOLD,
+		UI_SHAPE_BUTTON_SMALL, 10.0, UI_LAYOUT_BELOW,
+		 99,  44, 36, 28, 6, 6, (1 << 6), (1 << 6), 6
+	},
+	{
+		"",	"J",	NULL,	NULL,	NULL,
+		UI_COLOR_WHITE, 10.0, CAIRO_FONT_WEIGHT_BOLD,
+		UI_SHAPE_BUTTON_SMALL, 10.0, UI_LAYOUT_BELOW,
+		  0,  92, 36, 28, 6, 7, (1 << 6), (1 << 7), 7
+	},
+	{
+		"",	"K",	NULL,	NULL,	NULL,
+		UI_COLOR_WHITE, 10.0, CAIRO_FONT_WEIGHT_BOLD,
+		UI_SHAPE_BUTTON_SMALL, 10.0, UI_LAYOUT_BELOW,
+		 50,  92, 36, 28, 7, 1, (1 << 7), (1 << 1), 1
+	},
+	{
+		"",	"L",	NULL,	NULL,	NULL,
+		UI_COLOR_WHITE, 10.0, CAIRO_FONT_WEIGHT_BOLD,
+		UI_SHAPE_BUTTON_SMALL, 10.0, UI_LAYOUT_BELOW,
+		 99,  92, 36, 28, 7, 2, (1 << 7), (1 << 2), 2
+	},
+	{
+        "", "",	"UPDIR",	NULL,	NULL,
+        UI_COLOR_SILVER, 10.0, CAIRO_FONT_WEIGHT_BOLD,
+		UI_SHAPE_BUTTON_ROUND, 0.0, 0,
+		200,  38, 33, 33, 6, 1, (1 << 6), (1 << 1), 1
+	},
+	{
+        "",	"",	"BEG COPY",	NULL,	NULL,
+        UI_COLOR_SILVER, 10.0, CAIRO_FONT_WEIGHT_BOLD,
+		UI_SHAPE_BUTTON_ROUND, 0.0, 0,
+		164,  66, 33, 33, 6, 2, (1 << 6), (1 << 2), 2
+	},
+	{
+        "",	"",	"CUT",	NULL,	NULL,
+        UI_COLOR_SILVER, 10.0, CAIRO_FONT_WEIGHT_BOLD,
+		UI_SHAPE_BUTTON_ROUND, 0.0, 0,
+		200,  94, 33, 33, 6, 3, (1 << 6), (1 << 3), 3
+	},
+	{
+        "",	"",	"END PASTE",	NULL,	NULL,
+        UI_COLOR_SILVER, 10.0, CAIRO_FONT_WEIGHT_BOLD,
+		UI_SHAPE_BUTTON_ROUND, 0.0, 0,
+		236,  66, 33, 33, 6, 4, (1 << 6), (1 << 4), 4
+	},
+	{
+        "S\\kern-1 T\\kern-1 O\\kern-1\\triangleright",	"M",	"RCL",	"PREV.M",	NULL,
+		UI_COLOR_WHITE, 12.0, CAIRO_FONT_WEIGHT_BOLD,
+		UI_SHAPE_BUTTON_NORMAL, 12.0, UI_LAYOUT_LEFT,
+		  0, 141, 46, 28, 4, 1, (1 << 4), (1 << 1), 1
+	},
+	{
+		"EV\\kern-1 AL",	"N",	NULL,	NULL,	NULL,
+		UI_COLOR_WHITE, 12.0, CAIRO_FONT_WEIGHT_BOLD,
+		UI_SHAPE_BUTTON_NORMAL, 12.0, UI_LAYOUT_LEFT,
+		 59, 141, 46, 28, 3, 1, (1 << 3), (1 << 1), 1
+	},
+	{
+		"\\tick",	"O",	NULL,	NULL,	NULL,
+		UI_COLOR_WHITE, 12.0, CAIRO_FONT_WEIGHT_BOLD,
+		UI_SHAPE_BUTTON_NORMAL, 12.0, UI_LAYOUT_LEFT,
+		119, 141, 46, 28, 2, 1, (1 << 2), (1 << 1), 1
+	},
+	{
+        "M\\kern-1 E\\kern-1 N\\kern-1 U",	"P",	NULL,	NULL,	NULL,
+		UI_COLOR_WHITE, 12.0, CAIRO_FONT_WEIGHT_BOLD,
+		UI_SHAPE_BUTTON_NORMAL, 12.0, UI_LAYOUT_LEFT,
+		179, 141, 46, 28, 1, 1, (1 << 1), (1 << 1), 1
+	},
+	{
+		"\\arrowleftdblfull",	NULL,	NULL, "CLEAR",	NULL,
+		UI_COLOR_WHITE, 12.0, CAIRO_FONT_WEIGHT_BOLD,
+		UI_SHAPE_BUTTON_NORMAL, 0.0, 0,
+		238, 141, 46, 28, 0, 1, (1 << 0), (1 << 1), 1
+	},
+	{
+		"Y\\super x\\/super",	"Q",	"\\math_e\\xsuperior",	"LN",	NULL,
+		UI_COLOR_WHITE, 12.0, CAIRO_FONT_WEIGHT_BOLD,
+		UI_SHAPE_BUTTON_NORMAL, 12.0, UI_LAYOUT_LEFT,
+		  0, 183, 46, 28, 4, 2, (1 << 4), (1 << 2), 2
+	},
+	{
+        "\\radical\\overscore\\kern-7 X",	"R",
+        "\\math_x\\twosuperior",
+		"\\xsuperior\\kern-4\\math_radical\\overscore\\kern-5\\math_y",
+		NULL,
+		UI_COLOR_WHITE, 12.0, CAIRO_FONT_WEIGHT_BOLD,
+		UI_SHAPE_BUTTON_NORMAL, 12.0, UI_LAYOUT_LEFT,
+		 59, 183, 46, 28, 3, 2, (1 << 3), (1 << 2), 2
+	},
+	{
+		"SIN",	"S",	"ASIN",	NULL,	NULL,
+		UI_COLOR_WHITE, 12.0, CAIRO_FONT_WEIGHT_BOLD,
+		UI_SHAPE_BUTTON_NORMAL, 12.0, UI_LAYOUT_LEFT,
+		119, 183, 46, 28, 2, 2, (1 << 2), (1 << 2), 2
+	},
+	{
+		"COS",	"T",	"ACOS",	NULL,	NULL,
+		UI_COLOR_WHITE, 12.0, CAIRO_FONT_WEIGHT_BOLD,
+		UI_SHAPE_BUTTON_NORMAL, 12.0, UI_LAYOUT_LEFT,
+		179, 183, 46, 28, 1, 2, (1 << 1), (1 << 2), 2
+	},
+	{
+		"TAN",	"U",	"ATAN",	NULL,	NULL,
+		UI_COLOR_WHITE, 12.0, CAIRO_FONT_WEIGHT_BOLD,
+		UI_SHAPE_BUTTON_NORMAL, 12.0, UI_LAYOUT_LEFT,
+		238, 183, 46, 28, 0, 2, (1 << 0), (1 << 2), 2
+	},
+	{
+		"EEX",	"V",	"10\\xsuperior",	"LOG",	NULL,
+		UI_COLOR_WHITE, 12.0, CAIRO_FONT_WEIGHT_BOLD,
+		UI_SHAPE_BUTTON_NORMAL, 12.0, UI_LAYOUT_LEFT,
+		  0, 225, 46, 28, 4, 3, (1 << 4), (1 << 3), 3
+	},
+	{
+		"+\\divisionslash\\minus",	"W",
+		"\\math_notequal",
+		"\\math_equal",
+		NULL,
+		UI_COLOR_WHITE, 12.0, CAIRO_FONT_WEIGHT_BOLD,
+		UI_SHAPE_BUTTON_NORMAL, 12.0, UI_LAYOUT_LEFT,
+		 59, 225, 46, 28, 3, 3, (1 << 3), (1 << 3), 3
+	},
+	{
+		"X",	"X",
+		"\\math_lessequal",
+		"\\math_less",
+		NULL,
+		UI_COLOR_WHITE, 12.0, CAIRO_FONT_WEIGHT_BOLD,
+		UI_SHAPE_BUTTON_NORMAL, 12.0, UI_LAYOUT_LEFT,
+		119, 225, 46, 28, 2, 3, (1 << 2), (1 << 3), 3
+	},
+	{
+		"1/X",	"Y",
+		"\\math_greaterequal",
+		"\\math_greater",
+		NULL,
+		UI_COLOR_WHITE, 12.0, CAIRO_FONT_WEIGHT_BOLD,
+		UI_SHAPE_BUTTON_NORMAL, 12.0, UI_LAYOUT_LEFT,
+		179, 225, 46, 28, 1, 3, (1 << 1), (1 << 3), 3
+	},
+	{
+        "\\divide",	"Z",	"ABS",	"ARG",	NULL,
+		UI_COLOR_WHITE, 19.0, CAIRO_FONT_WEIGHT_BOLD,
+		UI_SHAPE_BUTTON_NORMAL, 12.0, UI_LAYOUT_LEFT_NO_SPACE,
+		238, 225, 46, 28, 0, 3, (1 << 0), (1 << 3), 3
+	},
+	{
+        "ALPHA",	"",	"",	"ENTRY",	NULL,
+		UI_COLOR_BLACK, 12.0, CAIRO_FONT_WEIGHT_BOLD,
+		UI_SHAPE_BUTTON_LARGE, 0.0, 0,
+		  0, 267, 46, 32, 0, 0,        0,        0, 4
+	},
+	{
+        "7",	"",	"",	"NUM.SLV",	NULL,
+		UI_COLOR_WHITE, 19.0, CAIRO_FONT_WEIGHT_BOLD,
+		UI_SHAPE_BUTTON_LARGE, 0.0, 0,
+		 59, 267, 46, 32, 3, 4, (1 << 3), (1 << 4), 4
+	},
+	{
+		"8",	NULL,	NULL,	NULL,	NULL,
+		UI_COLOR_WHITE, 19.0, CAIRO_FONT_WEIGHT_BOLD,
+		UI_SHAPE_BUTTON_LARGE, 0.0, 0,
+		119, 267, 46, 32, 2, 4, (1 << 2), (1 << 4), 4
+	},
+	{
+        "9",	"",	"",	"TIME",	NULL,
+		UI_COLOR_WHITE, 19.0, CAIRO_FONT_WEIGHT_BOLD,
+		UI_SHAPE_BUTTON_LARGE, 0.0, 0,
+		179, 267, 46, 32, 1, 4, (1 << 1), (1 << 4), 4
+	},
+	{
+		"\\multiply",	NULL,	"[ ]",	"\" \"",	NULL,
+		UI_COLOR_WHITE, 19.0, CAIRO_FONT_WEIGHT_BOLD,
+		UI_SHAPE_BUTTON_LARGE, 0.0, 0,
+		238, 267, 46, 32, 0, 4, (1 << 0), (1 << 4), 4
+	},
+	{
+		"\\uparrowleft",	NULL,	NULL,	NULL,	NULL,
+		UI_COLOR_BLACK, 19.0, CAIRO_FONT_WEIGHT_BOLD,
+		UI_SHAPE_BUTTON_LARGE, 0.0, 0,
+		  0, 313, 46, 32, 0, 0,        0,        0, 5
+	},
+	{
+		"4",	NULL,	NULL,	NULL,	NULL,
+		UI_COLOR_WHITE, 19.0, CAIRO_FONT_WEIGHT_BOLD,
+		UI_SHAPE_BUTTON_LARGE, 0.0, 0,
+		 59, 313, 46, 32, 3, 5, (1 << 3), (1 << 5), 5
+	},
+	{
+		"5",	NULL,	NULL,	NULL,	NULL,
+		UI_COLOR_WHITE, 19.0, CAIRO_FONT_WEIGHT_BOLD,
+		UI_SHAPE_BUTTON_LARGE, 0.0, 0,
+		119, 313, 46, 32, 2, 5, (1 << 2), (1 << 5), 5
+	},
+	{
+        "6",	NULL,	"CONVERT",	"UNITS",	NULL,
+		UI_COLOR_WHITE, 19.0, CAIRO_FONT_WEIGHT_BOLD,
+		UI_SHAPE_BUTTON_LARGE, 0.0, 0,
+		179, 313, 46, 32, 1, 5, (1 << 1), (1 << 5), 5
+	},
+	{
+		"\\minus",	NULL,	"( )",	"_",	NULL,
+		UI_COLOR_WHITE, 19.0, CAIRO_FONT_WEIGHT_BOLD,
+		UI_SHAPE_BUTTON_LARGE, 0.0, 0,
+		238, 313, 46, 32, 0, 5, (1 << 0), (1 << 5), 5
+	},
+	{
+		"\\uparrowright",	NULL,	NULL,	NULL,	NULL,
+		UI_COLOR_BLACK, 19.0, CAIRO_FONT_WEIGHT_BOLD,
+		UI_SHAPE_BUTTON_LARGE, 0.0, 0,
+		  0, 359, 46, 32, 0, 0,        0,        0, 6
+	},
+	{
+        "1",	"",	"ARITH",	"CMPLX",	NULL,
+		UI_COLOR_WHITE, 19.0, CAIRO_FONT_WEIGHT_BOLD,
+		UI_SHAPE_BUTTON_LARGE, 0.0, 0,
+		 59, 359, 46, 32, 3, 6, (1 << 3), (1 << 6), 6
+	},
+	{
+        "2",	"",	"",	"LIB",	NULL,
+		UI_COLOR_WHITE, 19.0, CAIRO_FONT_WEIGHT_BOLD,
+		UI_SHAPE_BUTTON_LARGE, 0.0, 0,
+		119, 359, 46, 32, 2, 6, (1 << 2), (1 << 6), 6
+	},
+	{
+        "3",	NULL,	"\\math_numbersign",	"BASE",	NULL,
+		UI_COLOR_WHITE, 19.0, CAIRO_FONT_WEIGHT_BOLD,
+		UI_SHAPE_BUTTON_LARGE, 0.0, 0,
+		179, 359, 46, 32, 1, 6, (1 << 1), (1 << 6), 6
+	},
+	{
+		"+",	NULL,
+		"{ }",
+		"\\guillemotleft\\ \\guillemotright",
+		NULL,
+		UI_COLOR_WHITE, 19.0, CAIRO_FONT_WEIGHT_BOLD,
+		UI_SHAPE_BUTTON_LARGE, 0.0, 0,
+		238, 359, 46, 32, 0, 6, (1 << 0), (1 << 6), 6
+	},
+	{
+		"ON",	NULL,	NULL,	"OFF",	NULL,
+		UI_COLOR_WHITE, 12.0, CAIRO_FONT_WEIGHT_BOLD,
+		UI_SHAPE_BUTTON_LARGE, 0.0, 0,
+		  0, 405, 46, 32, 0, 0,        0,        0, 0
+	},
+	{
+		"0",	NULL,
+		"\\math_infinity",
+		"\\math_arrowright",
+		NULL,
+		UI_COLOR_WHITE, 19.0, CAIRO_FONT_WEIGHT_BOLD,
+		UI_SHAPE_BUTTON_LARGE, 0.0, 0,
+		 59, 405, 46, 32, 3, 7, (1 << 3), (1 << 7), 7
+	},
+	{
+		"\\bullet",	NULL,
+		": :",
+		"\\math_downarrowleft",
+		NULL,
+		UI_COLOR_WHITE, 19.0, CAIRO_FONT_WEIGHT_BOLD,
+		UI_SHAPE_BUTTON_LARGE, 0.0, 0,
+		119, 405, 46, 32, 2, 7, (1 << 2), (1 << 7), 7
+	},
+	{
+		"SPC",	NULL,
+		"\\math_pi",
+		"\\large_comma",
+		NULL,
+		UI_COLOR_WHITE, 12.0, CAIRO_FONT_WEIGHT_BOLD,
+		UI_SHAPE_BUTTON_LARGE, 0.0, 0,
+		179, 405, 46, 32, 1, 7, (1 << 1), (1 << 7), 7
+	},
+	{
+		"ENTER",	NULL,	NULL,	"\\arrowright NUM",	NULL,
+		UI_COLOR_WHITE, 12.0, CAIRO_FONT_WEIGHT_BOLD,
+		UI_SHAPE_BUTTON_LARGE, 0.0, 0,
+		238, 405, 46, 32, 0, 7, (1 << 0), (1 << 7), 7
+	},
+};
+#define X50G_NEWRPL_UI_NR_KEYS (sizeof(x50g_newrpl_ui_keys) / sizeof(x50g_newrpl_ui_keys[0]))
+
 static void
 x49gp_ui_color_init(GdkColor *color, u8 red, u8 green, u8 blue)
 {
@@ -729,6 +1403,47 @@ x49gp_ui_style_init(GtkStyle *style, GtkWidget *widget,
 	style->ythickness = 0;
 }
 
+static const uint32_t PIXBUF_MAGIC = 0x47646b50;
+
+typedef struct {
+	uint32_t magic;
+	uint32_t length;
+	uint32_t pixdata_type;
+	uint32_t rowstride;
+	uint32_t width;
+	uint32_t height;
+} pixbuf_inline_data_t;
+
+static GdkPixbuf *
+x49gp_pixbuf_new_from_inline(gint data_length, const guint8 *data)
+{
+	const pixbuf_inline_data_t *pbd = (const pixbuf_inline_data_t *) data;
+	uint32_t magic, rowstride, width, height, length;
+	const guint8 *pixdata;
+
+	magic = ntohl(pbd->magic);
+	if (magic != PIXBUF_MAGIC) {
+		return NULL;
+	}
+
+	length = ntohl(pbd->length);
+	/* The data comes from a C string, which contains a trailing \0. */
+	/* This will be counted by sizeof(), but the embedded header */
+	/* specifies the true size. Compensate by adding 1 to it. */
+	if (length + 1 != data_length) {
+		return NULL;
+	}
+
+	width = ntohl(pbd->width);
+	height = ntohl(pbd->height);
+	rowstride = ntohl(pbd->rowstride);
+
+	pixdata = (void *) (pbd + 1);
+
+	return gdk_pixbuf_new_from_data(pixdata, GDK_COLORSPACE_RGB, TRUE, 8,
+					width, height, rowstride, NULL, NULL);
+}
+
 static int
 x49gp_ui_button_pixmaps_init(x49gp_t *x49gp, x49gp_ui_button_t *button,
 			     x49gp_ui_color_t color)
@@ -750,7 +1465,6 @@ x49gp_ui_button_pixmaps_init(x49gp_t *x49gp, x49gp_ui_button_t *button,
 
 		if (i == GTK_STATE_ACTIVE) {
 			if (color == UI_COLOR_SILVER) {
-				GError *gerror = NULL;
 
 				src = gdk_pixbuf_new_subpixbuf(ui->bg_pixbuf,
 					       ui->kb_x_offset + button->key->x,
@@ -760,8 +1474,8 @@ x49gp_ui_button_pixmaps_init(x49gp_t *x49gp, x49gp_ui_button_t *button,
 				dst = gdk_pixbuf_copy(src);
 				g_object_unref(src);
 
-				src = gdk_pixbuf_new_from_inline(sizeof(button_round),
-						button_round, FALSE, &gerror);
+				src = x49gp_pixbuf_new_from_inline(sizeof(button_round),
+								   button_round);
 
 				gdk_pixbuf_composite(src, dst,
 						0, 0, 
@@ -1462,6 +2176,56 @@ bitmap_font_draw_text(GdkDrawable *drawable, GdkColor *color,
 	}
 }
 
+void
+x49gp_ui_show_error(x49gp_t *x49gp, const char *text)
+{
+	GtkWidget *dialog;
+	x49gp_ui_t *ui = x49gp->ui;
+
+	dialog = gtk_message_dialog_new(GTK_WINDOW(ui->window),
+					GTK_DIALOG_DESTROY_WITH_PARENT,
+					GTK_MESSAGE_ERROR,
+					GTK_BUTTONS_OK,
+					"%s", text);
+
+	gtk_dialog_run(GTK_DIALOG(dialog));
+	gtk_widget_destroy(dialog);
+}
+
+static void
+x49gp_ui_choose_file(x49gp_t *x49gp, const char *prompt,
+		     GtkFileChooserAction action, char **filename)
+{
+	GtkWidget *dialog;
+	x49gp_ui_t *ui = x49gp->ui;
+
+	dialog = gtk_file_chooser_dialog_new(prompt, GTK_WINDOW(ui->window),
+					     action,
+					     GTK_STOCK_CANCEL,
+					     GTK_RESPONSE_CANCEL,
+					     GTK_STOCK_OPEN,
+					     GTK_RESPONSE_ACCEPT,
+					     NULL);
+
+	gtk_file_chooser_set_local_only(GTK_FILE_CHOOSER(dialog), TRUE);
+	gtk_file_chooser_set_select_multiple(GTK_FILE_CHOOSER(dialog), FALSE);
+
+	if (gtk_dialog_run(GTK_DIALOG(dialog)) == GTK_RESPONSE_ACCEPT) {
+		*filename = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(dialog));
+	} else {
+		*filename = NULL;
+	}
+
+	gtk_widget_destroy(dialog);
+}
+
+void
+x49gp_ui_open_firmware(x49gp_t *x49gp, char **filename)
+{
+	x49gp_ui_choose_file(x49gp, "Choose firmware ...",
+			     GTK_FILE_CHOOSER_ACTION_OPEN, filename);
+}
+
 static gboolean
 x49gp_ui_button_press(GtkWidget *widget, GdkEventButton *event,
 		      gpointer user_data)
@@ -1469,6 +2233,7 @@ x49gp_ui_button_press(GtkWidget *widget, GdkEventButton *event,
 	x49gp_ui_button_t *button = user_data;
 	const x49gp_ui_key_t *key = button->key;
 	x49gp_t *x49gp = button->x49gp;
+	x49gp_ui_t *ui = x49gp->ui;
 
 #ifdef DEBUG_X49GP_UI
 	fprintf(stderr, "%s:%u: type %u, button %u\n", __FUNCTION__, __LINE__, event->type, event->button);
@@ -1479,14 +2244,15 @@ x49gp_ui_button_press(GtkWidget *widget, GdkEventButton *event,
 
 	switch (event->button) {
 	case 1:
+		ui->buttons_down++;
+		if (button->down) return FALSE;
 		button->down = TRUE;
 		break;
 	case 3:
-		if (!button->down) {
-			gtk_button_pressed(GTK_BUTTON(button->button));
-		}
-		button->down = TRUE;
 		button->hold = TRUE;
+		if (button->down) return FALSE;
+		gtk_button_pressed(GTK_BUTTON(button->button));
+		button->down = TRUE;
 		break;
 	default:
 		return TRUE;
@@ -1499,14 +2265,62 @@ x49gp_ui_button_press(GtkWidget *widget, GdkEventButton *event,
 #endif
 
 	if (key->rowbit) {
-		s3c2410_io_port_g_set_bit(x49gp, key->eint, 1);
-		x49gp->keybycol[key->column] |= key->rowbit;
-		x49gp->keybyrow[key->row] |= key->columnbit;
+        s3c2410_io_port_g_update(x49gp, key->column, key->row, key->columnbit, key->rowbit, 1);
+
 	} else {
 		s3c2410_io_port_f_set_bit(x49gp, key->eint, 1);
 	}
 
 	return FALSE;
+}
+
+static void
+x49gp_release_single_button(x49gp_ui_button_t *button, x49gp_ui_button_t *cause)
+{
+	x49gp_t *x49gp = button->x49gp;
+	const x49gp_ui_key_t *key;
+	GtkButton *gtkbutton;
+
+#ifdef DEBUG_X49GP_UI
+	printf("%s: button %u: col %u, row %u, eint %u\n", __FUNCTION__,
+		event->button,
+		button->key->column, button->key->row, button->key->eint);
+#endif
+
+	button->down = FALSE;
+	button->hold = FALSE;
+
+	gtkbutton = GTK_BUTTON(button->button);
+
+	if (button != cause)
+		gtkbutton->in_button = FALSE;
+	gtk_button_released(gtkbutton);
+
+	key = button->key;
+
+	if (key->rowbit) {
+		s3c2410_io_port_g_update(x49gp, key->column, key->row, key->columnbit, key->rowbit, 0);
+
+	} else {
+		s3c2410_io_port_f_set_bit(x49gp, key->eint, 0);
+	}
+}
+
+static void
+x49gp_release_all_buttons(x49gp_t *x49gp, x49gp_ui_button_t *cause)
+{
+	x49gp_ui_button_t *button;
+	x49gp_ui_t *ui = x49gp->ui;
+	int i;
+
+	for (i = 0; i < ui->nr_buttons; i++) {
+		button = &ui->buttons[i];
+
+		if (! button->down)
+			continue;
+
+		x49gp_release_single_button(button, cause);
+	}
 }
 
 static gboolean
@@ -1516,9 +2330,6 @@ x49gp_ui_button_release(GtkWidget *widget, GdkEventButton *event,
 	x49gp_ui_button_t *button = user_data;
 	x49gp_t *x49gp = button->x49gp;
 	x49gp_ui_t *ui = x49gp->ui;
-	const x49gp_ui_key_t *key;
-	GtkButton *gtkbutton;
-	int i;
 
 	if (event->type != GDK_BUTTON_RELEASE)
 		return FALSE;
@@ -1530,36 +2341,34 @@ x49gp_ui_button_release(GtkWidget *widget, GdkEventButton *event,
 		return TRUE;
 	}
 
-	for (i = 0; i < ui->nr_buttons; i++) {
-		button = &ui->buttons[i];
+	if (ui->buttons_down > 0)
+		ui->buttons_down--;
 
-		if (! button->down)
-			continue;
+	if (ui->buttons_down == 0) {
+		x49gp_release_all_buttons(x49gp, button);
+	} else {
+		x49gp_release_single_button(button, button);
+	}
 
-#ifdef DEBUG_X49GP_UI
-		printf("%s: button %u: col %u, row %u, eint %u\n", __FUNCTION__,
-			event->button,
-			button->key->column, button->key->row, button->key->eint);
-#endif
+	return FALSE;
+}
 
-		button->down = FALSE;
-		button->hold = FALSE;
+static gboolean
+x49gp_ui_show_menu(GtkWidget *widget, GdkEventButton *event, gpointer user_data)
+{
+	x49gp_t *x49gp = user_data;
+	x49gp_ui_t *ui = x49gp->ui;
 
-		gtkbutton = GTK_BUTTON(button->button);
+	gtk_widget_set_sensitive(ui->menu_unmount,
+				 s3c2410_sdi_is_mounted(x49gp));
+	if (ui->menu_debug)
+		gtk_widget_set_sensitive(ui->menu_debug,
+					 ! gdbserver_isactive());
 
-		if (button != user_data)
-			gtkbutton->in_button = FALSE;
-		gtk_button_released(gtkbutton);
-
-		key = button->key;
-
-		if (key->rowbit) {
-			s3c2410_io_port_g_set_bit(x49gp, key->eint, 0);
-			x49gp->keybycol[key->column] &= ~(key->rowbit);
-			x49gp->keybyrow[key->row] &= ~(key->columnbit);
-		} else {
-			s3c2410_io_port_f_set_bit(x49gp, key->eint, 0);
-		}
+	if (event->type == GDK_BUTTON_PRESS && event->button == 3) {
+		gtk_menu_popup(GTK_MENU(ui->menu), NULL, NULL, NULL, NULL,
+			       event->button, event->time);
+		return TRUE;
 	}
 
 	return FALSE;
@@ -1581,6 +2390,76 @@ x49gp_ui_button_leave(GtkWidget *widget, GdkEventCrossing *event,
 }
 
 static gboolean
+x49gp_ui_focus_lost(GtkWidget *widget, GdkEventFocus *event,
+		    gpointer user_data)
+{
+	x49gp_t *x49gp = user_data;
+	x49gp_ui_t *ui = x49gp->ui;
+
+	if (event->type != GDK_FOCUS_CHANGE)
+		return FALSE;
+
+	ui->buttons_down = 0;
+	x49gp_release_all_buttons(x49gp, NULL);
+
+	return FALSE;
+}
+
+static void
+x49gp_ui_popup_at_widget(GtkMenu *menu, gint *x, gint *y, gboolean *push_in,
+			 gpointer user_data)
+{
+	GtkWidget *widget = GTK_WIDGET(user_data);
+
+	gdk_window_get_origin(widget->window, x, y);
+	*x += widget->allocation.x;
+	*y += widget->allocation.y;
+}
+
+static void
+x49gp_ui_mount_sd_folder(GtkMenuItem *menuitem, gpointer user_data)
+{
+	x49gp_t *x49gp = user_data;
+	char *filename;
+
+	x49gp_ui_choose_file(x49gp, "Choose SD folder ...",
+			     GTK_FILE_CHOOSER_ACTION_SELECT_FOLDER, &filename);
+	if (filename != NULL) s3c2410_sdi_mount(x49gp, filename);
+}
+
+static void
+x49gp_ui_mount_sd_image(GtkMenuItem *menuitem, gpointer user_data)
+{
+	x49gp_t *x49gp = user_data;
+	char *filename;
+	
+	x49gp_ui_choose_file(x49gp, "Choose SD image ...", 
+			     GTK_FILE_CHOOSER_ACTION_OPEN, &filename);
+	if (filename != NULL) s3c2410_sdi_mount(x49gp, filename);
+}
+
+static void
+x49gp_ui_debug(GtkMenuItem *menuitem, gpointer user_data)
+{
+	x49gp_t *x49gp = user_data;
+
+	if(x49gp->debug_port != 0 && ! gdbserver_isactive()) {
+		gdbserver_start(x49gp->debug_port);
+		gdb_handlesig(x49gp->env, 0);
+	}
+}
+
+static void
+x49gp_ui_calculator_reset(GtkMenuItem *menuitem, gpointer user_data)
+{
+	x49gp_t *x49gp = user_data;
+
+	x49gp_modules_reset(x49gp, X49GP_RESET_POWER_ON);
+	cpu_reset(x49gp->env);
+	x49gp_set_idle(x49gp, 0);
+}
+
+static gboolean
 x49gp_ui_key_event(GtkWidget *widget, GdkEventKey *event, gpointer user_data)
 {
 	x49gp_t *x49gp = user_data;
@@ -1589,76 +2468,95 @@ x49gp_ui_key_event(GtkWidget *widget, GdkEventKey *event, gpointer user_data)
 	GdkEventButton bev;
 	gboolean save_in;
 	int index;
+	guint keyval;
 
 #ifdef DEBUG_X49GP_UI
 	fprintf(stderr, "%s:%u: type %u, keyval %04x\n", __FUNCTION__, __LINE__, event->type, event->keyval);
 #endif
-
-	switch (event->keyval) {
-	case GDK_A: case GDK_a: case GDK_F1:	index = 0;	break;
-	case GDK_B: case GDK_b: case GDK_F2:	index = 1;	break;
-	case GDK_C: case GDK_c: case GDK_F3:	index = 2;	break;
-	case GDK_D: case GDK_d: case GDK_F4:	index = 3;	break;
-	case GDK_E: case GDK_e: case GDK_F5:	index = 4;	break;
-	case GDK_F: case GDK_f: case GDK_F6:	index = 5;	break;
-	case GDK_G: case GDK_g:			index = 6;	break;
-	case GDK_H: case GDK_h:			index = 7;	break;
-	case GDK_I: case GDK_i:			index = 8;	break;
-	case GDK_J: case GDK_j:			index = 9;	break;
-	case GDK_K: case GDK_k:			index = 10;	break;
-	case GDK_L: case GDK_l:			index = 11;	break;
-	case GDK_Up: case GDK_KP_Up:		index = 12;	break;
-	case GDK_Left: case GDK_KP_Left:	index = 13;	break;
-	case GDK_Down: case GDK_KP_Down:	index = 14;	break;
-	case GDK_Right: case GDK_KP_Right:	index = 15;	break;
-	case GDK_M: case GDK_m:			index = 16;	break;
-	case GDK_N: case GDK_n:			index = 17;	break;
-	case GDK_O: case GDK_o:
-	case GDK_apostrophe:			index = 18;	break;
-	case GDK_P: case GDK_p:			index = 19;	break;
-	case GDK_BackSpace: case GDK_Delete:
-	case GDK_KP_Delete:			index = 20;	break;
-	case GDK_Q: case GDK_q:			index = 21;	break;
-	case GDK_R: case GDK_r:			index = 22;	break;
-	case GDK_S: case GDK_s:			index = 23;	break;
-	case GDK_T: case GDK_t:			index = 24;	break;
-	case GDK_U: case GDK_u:			index = 25;	break;
-	case GDK_V: case GDK_v:			index = 26;	break;
-	case GDK_W: case GDK_w:			index = 27;	break;
-	case GDK_X: case GDK_x:			index = 28;	break;
-	case GDK_Y: case GDK_y:			index = 29;	break;
-	case GDK_Z: case GDK_z:
-	case GDK_slash: case GDK_KP_Divide:	index = 30;	break;
-	case GDK_Tab:				index = 31;	break;
-#ifndef __APPLE__
-	case GDK_Alt_L: case GDK_Alt_R:
-	case GDK_Meta_L: case GDK_Meta_R:
-	case GDK_Mode_switch:			index = 31;	break;
+	/* We want to know the keyval as interpreted without modifiers. */
+	/* However, there is one modifier we do care about: NumLock, */
+	/* which normally is represented by MOD2. */
+	if (! gdk_keymap_translate_keyboard_state(gdk_keymap_get_default(),
+						  event->hardware_keycode,
+						  event->state & GDK_MOD2_MASK,
+						  event->group,
+						  &keyval, NULL, NULL, NULL))
+		return FALSE;
+#ifdef DEBUG_X49GP_UI
+	fprintf(stderr, "%s:%u: state %u, base keyval %04x\n", __FUNCTION__, __LINE__, event->state, keyval);
 #endif
-	case GDK_7: case GDK_KP_7:		index = 32;	break;
-	case GDK_8: case GDK_KP_8:		index = 33;	break;
-	case GDK_9: case GDK_KP_9:		index = 34;	break;
-	case GDK_multiply: case GDK_backslash:
-	case GDK_KP_Multiply:			index = 35;	break;
-	case GDK_Shift_L:			index = 36;	break;
-	case GDK_4: case GDK_KP_4:		index = 37;	break;
-	case GDK_5: case GDK_KP_5:		index = 38;	break;
-	case GDK_6: case GDK_KP_6:		index = 39;	break;
-	case GDK_minus: case GDK_KP_Subtract:	index = 40;	break;
-	case GDK_Shift_R: case GDK_Control_L:	index = 41;	break;
-	case GDK_1: case GDK_KP_1:		index = 42;	break;
-	case GDK_2: case GDK_KP_2:		index = 43;	break;
-	case GDK_3: case GDK_KP_3:		index = 44;	break;
-	case GDK_plus: case GDK_equal:
-	case GDK_KP_Add:			index = 45;	break;
-	case GDK_Escape:			index = 46;	break;
-	case GDK_0: case GDK_KP_0:		index = 47;	break;
-	case GDK_period: case GDK_comma:
-	case GDK_KP_Decimal:			index = 48;	break;
-	case GDK_space: case GDK_KP_Space:	index = 49;	break;
-	case GDK_Return: case GDK_KP_Enter:	index = 50;	break;
 
-	case GDK_F12:
+	switch (keyval) {
+	case GDK_KEY_a: case GDK_KEY_F1:		index = 0;	break;
+	case GDK_KEY_b: case GDK_KEY_F2:		index = 1;	break;
+	case GDK_KEY_c: case GDK_KEY_F3:		index = 2;	break;
+	case GDK_KEY_d: case GDK_KEY_F4:		index = 3;	break;
+	case GDK_KEY_e: case GDK_KEY_F5:		index = 4;	break;
+	case GDK_KEY_f: case GDK_KEY_F6:		index = 5;	break;
+	case GDK_KEY_g:					index = 6;	break;
+	case GDK_KEY_h:					index = 7;	break;
+	case GDK_KEY_i:					index = 8;	break;
+	case GDK_KEY_j:					index = 9;	break;
+	case GDK_KEY_k:					index = 10;	break;
+	case GDK_KEY_l:					index = 11;	break;
+	case GDK_KEY_Up: case GDK_KEY_KP_Up:		index = 12;	break;
+	case GDK_KEY_Left: case GDK_KEY_KP_Left:	index = 13;	break;
+	case GDK_KEY_Down: case GDK_KEY_KP_Down:	index = 14;	break;
+	case GDK_KEY_Right: case GDK_KEY_KP_Right:	index = 15;	break;
+	case GDK_KEY_m:					index = 16;	break;
+	case GDK_KEY_n:					index = 17;	break;
+	case GDK_KEY_o: case GDK_KEY_apostrophe:	index = 18;	break;
+	case GDK_KEY_p:					index = 19;	break;
+	case GDK_KEY_BackSpace: case GDK_KEY_Delete:
+	case GDK_KEY_KP_Delete:				index = 20;	break;
+	case GDK_KEY_dead_circumflex: case GDK_KEY_asciicircum:
+	case GDK_KEY_q: case GDK_KEY_caret:		index = 21;	break;
+	case GDK_KEY_r:					index = 22;	break;
+	case GDK_KEY_s:					index = 23;	break;
+	case GDK_KEY_t:					index = 24;	break;
+	case GDK_KEY_u:					index = 25;	break;
+	case GDK_KEY_v:					index = 26;	break;
+	case GDK_KEY_w:					index = 27;	break;
+	case GDK_KEY_x:					index = 28;	break;
+	case GDK_KEY_y:					index = 29;	break;
+	case GDK_KEY_z:
+	case GDK_KEY_slash: case GDK_KEY_KP_Divide:	index = 30;	break;
+	case GDK_KEY_Tab:				index = 31;	break;
+#ifndef __APPLE__
+	//case GDK_KEY_Alt_L: case GDK_KEY_Alt_R:
+	//case GDK_KEY_Meta_L: case GDK_KEY_Meta_R:
+	case GDK_KEY_Mode_switch:			index = 31;	break;
+#endif
+	case GDK_KEY_7: case GDK_KEY_KP_7:		index = 32;	break;
+	case GDK_KEY_8: case GDK_KEY_KP_8:		index = 33;	break;
+	case GDK_KEY_9: case GDK_KEY_KP_9:		index = 34;	break;
+	case GDK_KEY_multiply: case GDK_KEY_KP_Multiply: index = 35;	break;
+	case GDK_KEY_Shift_L: case GDK_KEY_Shift_R:	index = 36;	break;
+	case GDK_KEY_4: case GDK_KEY_KP_4:		index = 37;	break;
+	case GDK_KEY_5: case GDK_KEY_KP_5:		index = 38;	break;
+	case GDK_KEY_6: case GDK_KEY_KP_6:		index = 39;	break;
+	case GDK_KEY_minus: case GDK_KEY_KP_Subtract:	index = 40;	break;
+	case GDK_KEY_Control_L: case GDK_KEY_Control_R:	index = 41;	break;
+	case GDK_KEY_1: case GDK_KEY_KP_1:		index = 42;	break;
+	case GDK_KEY_2: case GDK_KEY_KP_2:		index = 43;	break;
+	case GDK_KEY_3: case GDK_KEY_KP_3:		index = 44;	break;
+	case GDK_KEY_plus: case GDK_KEY_KP_Add:		index = 45;	break;
+	case GDK_KEY_Escape:				index = 46;	break;
+	case GDK_KEY_0: case GDK_KEY_KP_0:		index = 47;	break;
+	case GDK_KEY_period: case GDK_KEY_comma:
+	case GDK_KEY_KP_Decimal: case GDK_KP_Separator: index = 48;	break;
+	case GDK_KEY_space: case GDK_KEY_KP_Space:	index = 49;	break;
+	case GDK_KEY_Return: case GDK_KEY_KP_Enter:	index = 50;	break;
+
+	/* QWERTY compat: US English, UK English, International English */
+	case GDK_KEY_backslash:				index = 35;	break;
+	case GDK_KEY_equal:				index = 45;	break;
+
+	/* QWERTZ compat: German */
+	case GDK_KEY_ssharp:				index = 30;	break;
+	case GDK_KEY_numbersign:			index = 35;	break;
+
+	case GDK_KEY_F12:
 		switch (event->type) {
 		case GDK_KEY_PRESS:
 			x49gp_modules_reset(x49gp, X49GP_RESET_POWER_ON);
@@ -1672,6 +2570,19 @@ x49gp_ui_key_event(GtkWidget *widget, GdkEventKey *event, gpointer user_data)
 			break;
 		}
 		return FALSE;
+
+	case GDK_KEY_Menu:
+		gtk_widget_set_sensitive(ui->menu_unmount,
+					 s3c2410_sdi_is_mounted(x49gp));
+		if (ui->menu_debug)
+			gtk_widget_set_sensitive(ui->menu_debug,
+						 ! gdbserver_isactive());
+
+		gtk_menu_popup(GTK_MENU(ui->menu), NULL, NULL,
+			       x49gp_ui_popup_at_widget, ui->lcd_canvas,
+			       0, event->time);
+		return FALSE;
+
 	default:
 		return FALSE;
 	}
@@ -1981,11 +2892,8 @@ x49gp_window_configure_event(GtkWidget *widget, GdkEventConfigure *event,
 	cairo_set_line_join(cr, CAIRO_LINE_JOIN_MITER);
 
 	switch (ui->calculator) {
-	default:
-		ui->calculator = UI_CALCULATOR_HP49GP;
-		/* fall through */
-
 	case UI_CALCULATOR_HP49GP:
+	case UI_CALCULATOR_HP49GP_NEWRPL:
 		x49gp_ui_draw_text(cr, &widget->style->black,
 				   X49GP_UI_NORMAL_FONT, 15.0, 0.0,
 				   38, 42, 2,
@@ -2011,7 +2919,12 @@ x49gp_window_configure_event(GtkWidget *widget, GdkEventConfigure *event,
 		below_color = UI_COLOR_BLACK;
 		break;
 
+	default:
+		ui->calculator = UI_CALCULATOR_HP50G;
+		/* fall through */
+
 	case UI_CALCULATOR_HP50G:
+	case UI_CALCULATOR_HP50G_NEWRPL:
 		x49gp_ui_draw_text(cr, &widget->style->white,
 				   X49GP_UI_NORMAL_FONT, 15.0, 0.0,
 				   38, 42, 2,
@@ -2041,8 +2954,7 @@ x49gp_window_configure_event(GtkWidget *widget, GdkEventConfigure *event,
 	cairo_destroy(cr);
 
 	for (i = 0; i < ui->nr_buttons; i++) {
-		key = &x49gp_ui_keys[i];
-		key = &x50g_ui_keys[i];
+		key = ui->buttons[i].key;
 
 		if (key->left) {
 			bitmap_font_text_size(&tiny_font, key->left, &wl, &hl, &a, &dl);
@@ -2145,7 +3057,7 @@ x49gp_window_button_press(GtkWidget *widget, GdkEventButton *event,
 }
 
 static void
-x49gp_ui_quit(GtkWidget *widget, GdkEvent *event, gpointer user_data)
+x49gp_ui_quit(gpointer user_data, GtkWidget *widget, GdkEvent *event)
 {
 	x49gp_t *x49gp = user_data;
 
@@ -2209,22 +3121,45 @@ gui_load(x49gp_module_t *module, GKeyFile *keyfile)
 	x49gp_ui_t *ui = module->user_data;
 	x49gp_ui_button_t *button;
 	const x49gp_ui_key_t *key;
+	GtkWidget *screen_box;
+	GtkWidget *menu_mount_folder, *menu_mount_image, *menu_unmount;
+	GtkWidget *menu_debug, *menu_reset, *menu_quit;
 	GError *gerror = NULL;
 	GdkBitmap *shape;
+	char *typestr;
 	char *imagefile;
-	char *name;
+	int fd;
 	int i;
 
-	imagefile = x49gp_module_get_filename(module, keyfile, "image");
-	x49gp_module_get_string(module, keyfile, "name", "hp49g+", &name);
-
-	if (!strcmp(name, "hp49g+")) {
+	x49gp_module_get_string(module, keyfile, "type", "hp50g", &typestr);
+	if (!strcmp(typestr, "hp49g+")) {
 		ui->calculator = UI_CALCULATOR_HP49GP;
-	} else if (!strcmp(name, "hp50g")) {
+	} else if (!strcmp(typestr, "hp49g+/newrpl")) {
+		ui->calculator = UI_CALCULATOR_HP49GP_NEWRPL;
+	} else if (!strcmp(typestr, "hp50g")) {
 		ui->calculator = UI_CALCULATOR_HP50G;
+	} else if (!strcmp(typestr, "hp50g/newrpl")) {
+		ui->calculator = UI_CALCULATOR_HP50G_NEWRPL;
 	} else {
-		ui->calculator = 0;
+		fprintf(stderr, "Invalid calculator type, reverting to default\n");
+		ui->calculator = UI_CALCULATOR_HP50G;
 	}
+
+	x49gp_module_get_string(module, keyfile, "name",
+				ui->calculator == UI_CALCULATOR_HP49GP ?
+				"HP 49g+" :
+				ui->calculator == UI_CALCULATOR_HP49GP_NEWRPL ?
+				"HP 49g+ / newRPL" :
+				ui->calculator == UI_CALCULATOR_HP50G ?
+				"HP 50g" : "HP 50g / newRPL",
+				&(ui->name));
+
+	fd = x49gp_module_open_rodata(module,
+				      ui->calculator == UI_CALCULATOR_HP49GP ||
+				      ui->calculator == UI_CALCULATOR_HP49GP_NEWRPL ?
+				      "hp49g+.png" : "hp50g.png",
+				      &imagefile);
+	if (fd < 0) return fd;
 
 	gdk_pixbuf_get_file_info(imagefile, &ui->width, &ui->height);
 
@@ -2239,6 +3174,7 @@ gui_load(x49gp_module_t *module, GKeyFile *keyfile)
 	ui->kb_y_offset = 301;
 
 	ui->bg_pixbuf = gdk_pixbuf_new_from_file(imagefile, &gerror);
+	close(fd);
 
 
 	ui->window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
@@ -2248,8 +3184,8 @@ gui_load(x49gp_module_t *module, GKeyFile *keyfile)
 	gtk_widget_set(ui->window, "resizable", FALSE, NULL);
 	gtk_window_set_decorated(GTK_WINDOW(ui->window), FALSE);
 
-	gtk_widget_set_name(ui->window, name);
-	gtk_window_set_title(GTK_WINDOW(ui->window), name);
+	gtk_widget_set_name(ui->window, ui->name);
+	gtk_window_set_title(GTK_WINDOW(ui->window), ui->name);
 
 //	gtk_window_set_icon(GTK_WINDOW(ui->window), ui->bg_pixbuf);
 
@@ -2323,14 +3259,35 @@ gui_load(x49gp_module_t *module, GKeyFile *keyfile)
 	ui->lcd_canvas = gtk_drawing_area_new();
 	gtk_drawing_area_size(GTK_DRAWING_AREA(ui->lcd_canvas),
 			      ui->lcd_width, ui->lcd_height);
-	x49gp_ui_place_at(x49gp, GTK_FIXED(ui->fixed), ui->lcd_canvas,
+	screen_box = gtk_event_box_new();
+	gtk_event_box_set_visible_window(GTK_EVENT_BOX(screen_box),
+					 TRUE);
+	gtk_event_box_set_above_child(GTK_EVENT_BOX(screen_box),
+				      FALSE);
+	gtk_container_add(GTK_CONTAINER(screen_box), ui->lcd_canvas);
+	x49gp_ui_place_at(x49gp, GTK_FIXED(ui->fixed), screen_box,
 			  ui->lcd_x_offset, ui->lcd_y_offset,
 			  ui->lcd_width, ui->lcd_height);
 
 
 	for (i = 0; i < ui->nr_buttons; i++) {
-		key = &x49gp_ui_keys[i];
-		key = &x50g_ui_keys[i];
+		switch (ui->calculator) {
+		case UI_CALCULATOR_HP49GP:
+			key = &x49gp_ui_keys[i];
+			break;
+		case UI_CALCULATOR_HP49GP_NEWRPL:
+			key = &x49gp_newrpl_ui_keys[i];
+			break;
+		default:
+			ui->calculator = UI_CALCULATOR_HP50G;
+			/* fall through */
+		case UI_CALCULATOR_HP50G:
+			key = &x50g_ui_keys[i];
+			break;
+		case UI_CALCULATOR_HP50G_NEWRPL:
+			key = &x50g_newrpl_ui_keys[i];
+			break;
+		}
 		button = &ui->buttons[i];
 
 		button->x49gp = x49gp;
@@ -2394,6 +3351,49 @@ gui_load(x49gp_module_t *module, GKeyFile *keyfile)
 				      GDK_LEAVE_NOTIFY_MASK);
 	}
 
+	ui->menu = gtk_menu_new();
+
+	menu_mount_folder = gtk_menu_item_new_with_label("Mount SD folder ...");
+	gtk_menu_shell_append(GTK_MENU_SHELL(ui->menu), menu_mount_folder);
+	g_signal_connect(G_OBJECT(menu_mount_folder), "activate",
+			 G_CALLBACK(x49gp_ui_mount_sd_folder), x49gp);
+	menu_mount_image = gtk_menu_item_new_with_label("Mount SD image ...");
+	gtk_menu_shell_append(GTK_MENU_SHELL(ui->menu), menu_mount_image);
+	g_signal_connect(G_OBJECT(menu_mount_image), "activate",
+			 G_CALLBACK(x49gp_ui_mount_sd_image), x49gp);
+	menu_unmount = gtk_menu_item_new_with_label("Unmount SD");
+	gtk_menu_shell_append(GTK_MENU_SHELL(ui->menu), menu_unmount);
+	g_signal_connect_swapped(G_OBJECT(menu_unmount), "activate", 
+				 G_CALLBACK(s3c2410_sdi_unmount), x49gp);
+	ui->menu_unmount = menu_unmount;
+
+	if (x49gp->debug_port != 0) {
+		gtk_menu_shell_append(GTK_MENU_SHELL(ui->menu),
+				      gtk_separator_menu_item_new());
+		menu_debug = gtk_menu_item_new_with_label("Start debugger");
+		gtk_menu_shell_append(GTK_MENU_SHELL(ui->menu), menu_debug);
+		g_signal_connect(G_OBJECT(menu_debug), "activate", 
+				 G_CALLBACK(x49gp_ui_debug), x49gp);
+		ui->menu_debug = menu_debug;
+	} else
+		ui->menu_debug = NULL;
+
+	gtk_menu_shell_append(GTK_MENU_SHELL(ui->menu),
+			      gtk_separator_menu_item_new());
+	menu_reset = gtk_menu_item_new_with_label("Reset");
+	gtk_menu_shell_append(GTK_MENU_SHELL(ui->menu), menu_reset);
+	g_signal_connect(G_OBJECT(menu_reset), "activate",
+			 G_CALLBACK(x49gp_ui_calculator_reset), x49gp);
+	menu_quit = gtk_menu_item_new_with_label("Quit");
+	gtk_menu_shell_append(GTK_MENU_SHELL(ui->menu), menu_quit);
+	g_signal_connect_swapped(G_OBJECT(menu_quit), "activate",
+				 G_CALLBACK(x49gp_ui_quit), x49gp);
+
+	gtk_widget_show_all(ui->menu);
+
+	g_signal_connect(G_OBJECT(screen_box), "button-press-event",
+			 G_CALLBACK(x49gp_ui_show_menu), x49gp);
+
 	g_signal_connect(G_OBJECT(ui->background), "configure-event",
 			 G_CALLBACK(x49gp_window_configure_event), x49gp);
 
@@ -2402,10 +3402,13 @@ gui_load(x49gp_module_t *module, GKeyFile *keyfile)
 	g_signal_connect(G_OBJECT(ui->lcd_canvas), "configure-event",
 			 G_CALLBACK(x49gp_lcd_configure_event), x49gp);
 
-	g_signal_connect(G_OBJECT(ui->window), "delete-event",
-			 G_CALLBACK(x49gp_ui_quit), x49gp);
-	g_signal_connect(G_OBJECT(ui->window), "destroy",
-			 G_CALLBACK(x49gp_ui_quit), x49gp);
+	g_signal_connect_swapped(G_OBJECT(ui->window), "delete-event",
+				 G_CALLBACK(x49gp_ui_quit), x49gp);
+	g_signal_connect_swapped(G_OBJECT(ui->window), "destroy",
+				 G_CALLBACK(x49gp_ui_quit), x49gp);
+
+	g_signal_connect(G_OBJECT(ui->window), "focus-out-event",
+			 G_CALLBACK(x49gp_ui_focus_lost), x49gp);
 
 	g_signal_connect(G_OBJECT(ui->window), "key-press-event",
 			 G_CALLBACK(x49gp_ui_key_event), x49gp);
@@ -2416,6 +3419,7 @@ gui_load(x49gp_module_t *module, GKeyFile *keyfile)
 			 G_CALLBACK(x49gp_window_button_press), x49gp);
 
 	gtk_widget_add_events(ui->window,
+			      GDK_FOCUS_CHANGE_MASK |
 			      GDK_BUTTON_PRESS_MASK |
 			      GDK_KEY_PRESS_MASK |
 			      GDK_KEY_RELEASE_MASK);
@@ -2427,6 +3431,17 @@ gui_load(x49gp_module_t *module, GKeyFile *keyfile)
 static int
 gui_save(x49gp_module_t *module, GKeyFile *keyfile)
 {
+	x49gp_ui_t *ui = module->user_data;
+
+	x49gp_module_set_string(module, keyfile, "type",
+				ui->calculator == UI_CALCULATOR_HP49GP ?
+				"hp49g+" :
+				ui->calculator == UI_CALCULATOR_HP49GP_NEWRPL ?
+				"hp49g+/newrpl" :
+				ui->calculator == UI_CALCULATOR_HP50G ?
+				"hp50g" : "hp50g/newrpl");
+	x49gp_module_set_string(module, keyfile, "name", ui->name);
+
 	return 0;
 }
 

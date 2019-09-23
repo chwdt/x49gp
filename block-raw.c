@@ -21,12 +21,8 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
  */
-#ifdef QEMU_OLD
-#include "vl.h"
-#else
 #include "qemu-common.h"
 #include "block.h"
-#endif
 #include "block_int.h"
 #include <assert.h>
 #ifndef _WIN32
@@ -231,17 +227,24 @@ static int raw_create(const char *filename, int64_t total_size,
                       const char *backing_file, int flags)
 {
     int fd;
+	int result = 0;
 
     if (flags || backing_file)
         return -ENOTSUP;
 
     fd = open(filename, O_WRONLY | O_CREAT | O_TRUNC | O_BINARY, 
               0644);
-    if (fd < 0)
-        return -EIO;
-    ftruncate(fd, total_size * 512);
-    close(fd);
-    return 0;
+    if (fd < 0) {
+        result=-errno;
+    } else {
+        if (ftruncate(fd, total_size * 512)) {
+            result=-errno;
+        }
+        if (close(fd) != 0) {
+            result=-errno;
+        }
+	}
+    return result;
 }
 
 static void raw_flush(BlockDriverState *bs)

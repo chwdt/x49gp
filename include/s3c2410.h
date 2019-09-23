@@ -336,7 +336,7 @@ extern int x49gp_s3c2410_adc_init(x49gp_t *x49gp);
 extern int x49gp_s3c2410_spi_init(x49gp_t *x49gp);
 extern int x49gp_s3c2410_sdi_init(x49gp_t *x49gp);
 
-extern void s3c2410_io_port_g_set_bit(x49gp_t *x49gp, int n, uint32_t set);
+extern void s3c2410_io_port_g_update(x49gp_t *x49gp, int column, int row, unsigned char columnbit, unsigned char rowbit, uint32_t new_state);
 extern void s3c2410_io_port_f_set_bit(x49gp_t *x49gp, int n, uint32_t set);
 
 extern void x49gp_schedule_lcd_update(x49gp_t *x49gp);

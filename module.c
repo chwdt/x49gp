@@ -37,17 +37,15 @@ x49gp_modules_init(x49gp_t *x49gp)
 		exit(1);
 	}
 
-printf("%s: phys_ram_base: %p\n", __FUNCTION__, phys_ram_base);
+#ifdef DEBUG_X49GP_MODULES
+	printf("%s: phys_ram_base: %p\n", __FUNCTION__, phys_ram_base);
+#endif
 
 	phys_ram_dirty = qemu_vmalloc(phys_ram_size >> TARGET_PAGE_BITS);
 	memset(phys_ram_dirty, 0xff, phys_ram_size >> TARGET_PAGE_BITS);
 
-#ifndef QEMU_OLD
-        {
-          ram_addr_t x49gp_ram_alloc(ram_addr_t size, uint8_t *base);
-          x49gp_ram_alloc(phys_ram_size, phys_ram_base);
-        }
-#endif
+	ram_addr_t x49gp_ram_alloc(ram_addr_t size, uint8_t *base);
+	x49gp_ram_alloc(phys_ram_size, phys_ram_base);
 
 	return 0;
 }
@@ -103,6 +101,13 @@ x49gp_modules_load(x49gp_t *x49gp, const char *filename)
 	printf("%s:%u:\n", __FUNCTION__, __LINE__);
 #endif
 
+	if (g_mkdir_with_parents(x49gp->basename, 0755)) {
+		error = -errno;
+		fprintf(stderr, "%s:%u: g_mkdir_with_parents: %s\n",
+			__FUNCTION__, __LINE__, strerror(errno));
+		return error;
+	}
+
 	x49gp->config = g_key_file_new();
 	if (NULL == x49gp->config) {
 		fprintf(stderr, "%s:%u: g_key_file_new: Out of memory\n",
@@ -110,7 +115,9 @@ x49gp_modules_load(x49gp_t *x49gp, const char *filename)
 		return -ENOMEM;
 	}
 
-	if (! g_key_file_load_from_file(x49gp->config, filename, 0, &gerror)) {
+	if (! g_key_file_load_from_file(x49gp->config, filename,
+				G_KEY_FILE_KEEP_COMMENTS, &gerror)
+	    && ! g_error_matches(gerror, G_FILE_ERROR, G_FILE_ERROR_NOENT)) {
 		fprintf(stderr, "%s:%u: g_key_file_load_from_file: %s\n",
 			__FUNCTION__, __LINE__, gerror->message);
 		g_key_file_free(x49gp->config);
@@ -133,16 +140,18 @@ x49gp_modules_load(x49gp_t *x49gp, const char *filename)
 {
 	extern unsigned char *phys_ram_base;
 
-printf("%s: phys_ram_base: %p\n", __FUNCTION__, phys_ram_base);
-printf("\t%02x %02x %02x %02x %02x %02x %02x %02x\n",
-	phys_ram_base[0],
-	phys_ram_base[1],
-	phys_ram_base[2],
-	phys_ram_base[3],
-	phys_ram_base[4],
-	phys_ram_base[5],
-	phys_ram_base[6],
-	phys_ram_base[7]);
+#ifdef DEBUG_X49GP_MODULES
+	printf("%s: phys_ram_base: %p\n", __FUNCTION__, phys_ram_base);
+	printf("\t%02x %02x %02x %02x %02x %02x %02x %02x\n",
+	       phys_ram_base[0],
+	       phys_ram_base[1],
+	       phys_ram_base[2],
+	       phys_ram_base[3],
+	       phys_ram_base[4],
+	       phys_ram_base[5],
+	       phys_ram_base[6],
+	       phys_ram_base[7]);
+#endif
 }
 
 	return result;
@@ -176,7 +185,7 @@ x49gp_modules_save(x49gp_t *x49gp, const char *filename)
 		return -ENOMEM;
 	}
 
-	fd = open(filename, O_WRONLY | O_CREAT | O_TRUNC, 0666);
+	fd = open(filename, O_WRONLY | O_CREAT | O_TRUNC, 0644);
 	if (fd < 0) {
 		error = -errno;
 		fprintf(stderr, "%s:%u: open %s: %s\n",
@@ -227,60 +236,45 @@ x49gp_module_unregister(x49gp_module_t *module)
 	return 0;
 }
 
-char *
+int
 x49gp_module_get_filename(x49gp_module_t *module, GKeyFile *key,
-			  const char *name)
+			  const char *name, char *reset, char **valuep,
+			  char **path)
 {
-	char *filename;
-	char *basename;
-	const char *home;
-	char *path;
+	x49gp_t *x49gp = module->x49gp;
+	int error;
 
-	filename = g_key_file_get_string(key, module->name, name, NULL);
-	if (NULL == filename) {
-		fprintf(stderr, "%s: %s:%u: key \"%s\" not found\n",
-			module->name, __FUNCTION__, __LINE__, name);
-		return NULL;
+	error = x49gp_module_get_string(module, key, name, reset, valuep);
+
+	if (g_path_is_absolute(*valuep)) {
+		*path = g_strdup(*valuep);
+		return error;
 	}
 
-	if (g_path_is_absolute(filename)) {
-		return filename;
-	}
-
-	home = g_get_home_dir();
-
-	basename = g_key_file_get_string(key, "x49gp", "basename", NULL);
-	if (NULL == basename) {
-		fprintf(stderr, "%s: %s:%u: key \"basename\" not found\n",
-			"x49gp", __FUNCTION__, __LINE__);
-		g_free(filename);
-		return NULL;
-	}
-
-	path = g_build_filename(home, basename, filename, NULL);
+	*path = g_build_filename(x49gp->basename, *valuep, NULL);
 	if (NULL == path) {
 		fprintf(stderr, "%s: %s:%u: Out of memory\n",
 			module->name, __FUNCTION__, __LINE__);
+		g_free(*valuep);
+		*valuep = NULL;
 	}
 
-	g_free(filename);
-	g_free(basename);
+	return error;
+}
 
-	return path;
+int
+x49gp_module_set_filename(x49gp_module_t *module, GKeyFile *key,
+			  const char *name, const char *value)
+{
+	return x49gp_module_set_string(module, key, name, value);
 }
 
 int
 x49gp_module_get_int(x49gp_module_t *module, GKeyFile *key, const char *name,
 		     int reset, int *valuep)
 {
-	uint32_t value;
-	int error;
-
-	error = x49gp_module_get_u32(module, key, name, reset, &value);
-	if (0 == error) {
-		*valuep = value;
-	}
-	return error;
+	return x49gp_module_get_u32(module, key, name, reset,
+				    (uint32_t *) valuep);
 }
 
 int
@@ -411,12 +405,65 @@ x49gp_module_get_string(x49gp_module_t *module, GKeyFile *key,
 	if (NULL == data) {
 		fprintf(stderr, "%s: %s:%u: key \"%s\" not found\n",
 			module->name, __FUNCTION__, __LINE__, name);
-		*valuep = strdup(reset);
+		*valuep = g_strdup(reset);
 		return -EAGAIN;
 	}
 
 	*valuep = data;
 	return 0;
+}
+
+int x49gp_module_set_string(x49gp_module_t *module, GKeyFile *key,
+			const char *name, const char *value)
+{
+	g_key_file_set_value(key, module->name, name, value);
+
+	return 0;
+}
+
+int
+x49gp_module_open_rodata(x49gp_module_t *module, const char *name,
+			      char **path)
+{
+	x49gp_t *x49gp = module->x49gp;
+	int fd;
+	int error;
+
+	*path = g_build_filename(x49gp->progpath, name, NULL);
+	if (NULL == *path) {
+		fprintf(stderr, "%s: %s:%u: Out of memory\n",
+			module->name, __FUNCTION__, __LINE__);
+		return -ENOMEM;
+	}
+
+	fd = open(*path, O_RDONLY);
+
+#ifdef X49GP_DATADIR
+	if (fd < 0 && (errno == EACCES || errno == ENOENT)) {
+		g_free(*path);
+
+		*path = g_build_filename(X49GP_DATADIR, name, NULL);
+		if (NULL == *path) {
+			fprintf(stderr, "%s: %s:%u: Out of memory\n",
+				module->name, __FUNCTION__, __LINE__);
+			return -ENOMEM;
+		}
+
+		fd = open(*path, O_RDONLY);
+	}
+#endif
+
+	if (fd < 0) {
+		error = -errno;
+		fprintf(stderr, "%s: %s:%u: open %s: %s\n",
+			module->name, __FUNCTION__, __LINE__,
+			*path, strerror(errno));
+		g_free(*path);
+		*path = NULL;
+		return error;
+	}
+
+	return fd;
 }
 
 int

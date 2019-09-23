@@ -164,9 +164,6 @@ s3c2410_watchdog_read(void *opaque, target_phys_addr_t offset)
 	s3c2410_watchdog_t *watchdog = opaque;
 	s3c2410_offset_t *reg;
 
-#ifdef QEMU_OLD
-	offset -= S3C2410_WATCHDOG_BASE;
-#endif
 	if (! S3C2410_OFFSET_OK(watchdog, offset)) {
 		return ~(0);
 	}
@@ -189,9 +186,6 @@ s3c2410_watchdog_write(void *opaque, target_phys_addr_t offset, uint32_t data)
 	s3c2410_watchdog_t *watchdog = opaque;
 	s3c2410_offset_t *reg;
 
-#ifdef QEMU_OLD
-	offset -= S3C2410_WATCHDOG_BASE;
-#endif
 	if (! S3C2410_OFFSET_OK(watchdog, offset)) {
 		return;
 	}
@@ -335,14 +329,11 @@ s3c2410_watchdog_init(x49gp_module_t *module)
 	watchdog->timer = x49gp_new_timer(X49GP_TIMER_VIRTUAL,
 					  s3c2410_watchdog_tick, watchdog);
 
-#ifdef QEMU_OLD
-	iotype = cpu_register_io_memory(0, s3c2410_watchdog_readfn,
-					s3c2410_watchdog_writefn, watchdog);
-#else
 	iotype = cpu_register_io_memory(s3c2410_watchdog_readfn,
 					s3c2410_watchdog_writefn, watchdog);
+#ifdef DEBUG_S3C2410_WATCHDOG
+	printf("%s: iotype %08x\n", __FUNCTION__, iotype);
 #endif
-printf("%s: iotype %08x\n", __FUNCTION__, iotype);
 	cpu_register_physical_memory(S3C2410_WATCHDOG_BASE, S3C2410_MAP_SIZE, iotype);
 	return 0;
 }

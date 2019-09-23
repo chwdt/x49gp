@@ -9,7 +9,12 @@
 #include <sys/mman.h>
 #include <errno.h>
 
+#include <gtk/gtk.h>
+#include <glib.h>
+#include <cairo.h>
+
 #include <x49gp.h>
+#include <x49gp_ui.h>
 #include <memory.h>
 #include <byteorder.h>
 
@@ -40,6 +45,7 @@ typedef struct {
 	uint32_t		cfi_size;
 	uint32_t		sector_size;
 	uint32_t		block_size;
+	char		*filename;
 	int			fd;
 	size_t			size;
 
@@ -53,6 +59,8 @@ typedef struct {
 #define SST29VF160_SECTOR_SIZE	0x00001000
 #define SST29VF160_BLOCK_SIZE	0x00010000
 #define SST29VF160_SIZE		0x00200000
+
+#define BOOT_SIZE		0x00004000
 
 static const unsigned short sst29vf160_cfi_data[] =
 {
@@ -132,7 +140,7 @@ flash_get_halfword(x49gp_flash_t *flash, uint32_t offset)
 		break;
 
 	case FLASH_STATE_CFI_QUERY:
-		if (offset < flash->cfi_size) {
+		if ( (offset>>1) < flash->cfi_size) {
 			data = flash->cfi_data[offset >> 1];
 		} else {
 			data = 0x0000;
@@ -322,10 +330,6 @@ flash_readb(void *opaque, target_phys_addr_t offset)
 	uint32_t shift;
 	unsigned char data;
 
-#ifdef QEMU_OLD
-	offset -= (target_phys_addr_t) phys_ram_base + flash->offset;
-#endif
-
 	if (flash->state == FLASH_STATE_NORMAL) {
 		data = *(datap + offset);
 	} else {
@@ -349,10 +353,6 @@ flash_readw(void *opaque, target_phys_addr_t offset)
 	uint8_t *datap = flash->data;
 	uint32_t data;
 
-#ifdef QEMU_OLD
-	offset -= (target_phys_addr_t) phys_ram_base + flash->offset;
-#endif
-
 	if (flash->state == FLASH_STATE_NORMAL) {
 		data = lduw_p(datap + offset);
 	} else {
@@ -373,10 +373,6 @@ flash_readl(void *opaque, target_phys_addr_t offset)
 	x49gp_flash_t *flash = opaque;
 	uint8_t *datap = flash->data;
 	uint32_t data;
-
-#ifdef QEMU_OLD
-	offset -= (target_phys_addr_t) phys_ram_base + flash->offset;
-#endif
 
 	if (flash->state == FLASH_STATE_NORMAL) {
 		data = ldl_p(datap + offset);
@@ -399,10 +395,6 @@ flash_writeb(void *opaque, target_phys_addr_t offset, uint32_t data)
 	x49gp_flash_t *flash = opaque;
 	uint32_t shift;
 
-#ifdef QEMU_OLD
-	offset -= (target_phys_addr_t) phys_ram_base + flash->offset;
-#endif
-
 	data &= 0xff;
 
 #ifdef DEBUG_X49GP_FLASH_WRITE
@@ -424,10 +416,6 @@ flash_writew(void *opaque, target_phys_addr_t offset, uint32_t data)
 {
 	x49gp_flash_t *flash = opaque;
 
-#ifdef QEMU_OLD
-	offset -= (target_phys_addr_t) phys_ram_base + flash->offset;
-#endif
-
 	data &= 0xffff;
 
 #ifdef DEBUG_X49GP_FLASH_WRITE
@@ -443,10 +431,6 @@ flash_writel(void *opaque, target_phys_addr_t offset, uint32_t data)
 {
 	x49gp_flash_t *flash = opaque;
 
-#ifdef QEMU_OLD
-	offset -= (target_phys_addr_t) phys_ram_base + flash->offset;
-#endif
-
 #ifdef DEBUG_X49GP_FLASH_WRITE
 	printf("write FLASH 4 (state %u) at offset %08lx: %08x\n",
 		flash->state, offset, data);
@@ -460,48 +444,262 @@ static int
 flash_load(x49gp_module_t *module, GKeyFile *key)
 {
 	x49gp_flash_t *flash = module->user_data;
+	x49gp_t *x49gp = module->x49gp;
+	x49gp_ui_t *ui = x49gp->ui;
+	int calc = ui->calculator;
 	char *filename;
+	struct stat st;
+	char *bootfile;
+	int bootfd, fwfd;
+	int error;
+	int i;
+	char bank_marker[5] = {0xf0, 0x02, 0x00, 0x00, 0x00};
+	int bytes_read;
 
 #ifdef DEBUG_X49GP_MODULES
 	printf("%s: %s:%u\n", module->name, __FUNCTION__, __LINE__);
 #endif
 
-	filename = x49gp_module_get_filename(module, key, "filename");
-	if (NULL == filename) {
-		fprintf(stderr, "%s: %s:%u: key \"filename\" not found\n",
-			module->name, __FUNCTION__, __LINE__);
-		return -1;
-	}
+	error = x49gp_module_get_filename(module, key, "filename", "flash",
+					  &(flash->filename), &filename);
 
-	flash->fd = open(filename, O_RDWR);
+	flash->fd = open(filename, O_RDWR | O_CREAT, 0644);
 	if (flash->fd < 0) {
+		error = -errno;
 		fprintf(stderr, "%s: %s:%u: open %s: %s\n",
 			module->name, __FUNCTION__, __LINE__,
 			filename, strerror(errno));
 		g_free(filename);
-		return -1;
+		return error;
 	}
 
-	flash->data = mmap(phys_ram_base + flash->offset, SST29VF160_SIZE,
+	flash->size = SST29VF160_SIZE;
+	if (fstat(flash->fd, &st) < 0) {
+		error = -errno;
+		fprintf(stderr, "%s: %s:%u: fstat %s: %s\n",
+				module->name, __FUNCTION__, __LINE__,
+		  filename, strerror(errno));
+		g_free(filename);
+		close(flash->fd);
+		flash->fd = -1;
+		return error;
+	}
+
+	if (ftruncate(flash->fd, flash->size) < 0) {
+		error = -errno;
+		fprintf(stderr, "%s: %s:%u: ftruncate %s: %s\n",
+			module->name, __FUNCTION__, __LINE__,
+			filename, strerror(errno));
+		g_free(filename);
+		close(flash->fd);
+		flash->fd = -1;
+		return error;
+	}
+
+	flash->data = mmap(phys_ram_base + flash->offset, flash->size,
 			   PROT_READ | PROT_WRITE, MAP_SHARED | MAP_FIXED,
 			   flash->fd, 0);
 	if (flash->data == (void *) -1) {
+		error = -errno;
 		fprintf(stderr, "%s: %s:%u: mmap %s: %s\n",
 			module->name, __FUNCTION__, __LINE__,
 			filename, strerror(errno));
 		g_free(filename);
 		close(flash->fd);
 		flash->fd = -1;
-		return -1;
+		return error;
 	}
-	flash->size = SST29VF160_SIZE;
 
-	g_free(filename);
-	return 0;
+
+	if (flash->size > st.st_size) {
+		fprintf(stderr, "Flash too small, rebuilding\n");
+		x49gp->startup_reinit = X49GP_REINIT_FLASH_FULL;
+	}
+	if (x49gp->startup_reinit >= X49GP_REINIT_FLASH) {
+
+		if (x49gp->startup_reinit == X49GP_REINIT_FLASH_FULL)
+			memset(phys_ram_base + flash->offset, 0xff,
+			       flash->size - st.st_size);
+
+		bootfd = x49gp_module_open_rodata(module,
+						  calc == UI_CALCULATOR_HP49GP ||
+						  calc == UI_CALCULATOR_HP49GP_NEWRPL ?
+						  "boot-49g+.bin" :
+						  "boot-50g.bin",
+						  &bootfile);
+
+		if (bootfd < 0) {
+			g_free(filename);
+			close(flash->fd);
+			flash->fd = -1;
+			return bootfd;
+		}
+
+		if (read(bootfd, phys_ram_base + flash->offset,
+			 BOOT_SIZE) < 0) {
+			error = -errno;
+			fprintf(stderr, "%s: %s:%u: read %s: %s\n",
+				module->name, __FUNCTION__, __LINE__,
+				filename, strerror(errno));
+			g_free(filename);
+			g_free(bootfile);
+			close(bootfd);
+			close(flash->fd);
+			flash->fd = -1;
+			return error;
+		}
+
+		g_free(filename);
+		close(bootfd);
+		g_free(bootfile);
+
+		if (x49gp->startup_reinit == X49GP_REINIT_FLASH_FULL) {
+			/* The stock firmware expects special markers in certain
+			   spots across the flash. Without these, the user banks
+			   act up and are not usable, and PINIT apparently won't
+			   fix it. Let's help it out; custom firmware will have
+			   to deal with remnants of the user banks on real
+			   calculators anyway, so if they break here, they will
+			   too on actual hardware because that always comes with
+			   the stock firmware and its user banks marked
+			   properly. */
+			for (i=2;i<14;i++) {
+				bank_marker[1] = i;
+				memcpy(phys_ram_base + flash->offset + 0x40100 +
+				       0x20000 * i, bank_marker, 5);
+			}
+		}
+
+retry:
+		filename = NULL;
+		if (x49gp->firmware != NULL) {
+			filename = g_strdup(x49gp->firmware);
+		} else {
+			x49gp_ui_open_firmware(x49gp, &filename);
+		}
+		if (filename != NULL) {
+			fwfd = open(filename, O_RDONLY);
+			if (fwfd < 0) {
+				fprintf(stderr, "%s: %s:%u: open %s: %s\n",
+					module->name, __FUNCTION__, __LINE__,
+					filename, strerror(errno));
+				/* Mark firmware as invalid if there is one */
+				memset(phys_ram_base + flash->offset +
+				       BOOT_SIZE, 0, 16);
+				if (x49gp->firmware != NULL) {
+					fprintf(stderr, "Warning: Could not "
+						"open selected firmware, "
+						"falling back to bootloader "
+						"recovery tools\n");
+				} else {
+					x49gp_ui_show_error(x49gp,
+							    "Could not open "
+							    "selected "
+							    "firmware!");
+					goto retry;
+				}
+			} else {
+				bytes_read = read(fwfd, phys_ram_base + 
+						  flash->offset + BOOT_SIZE,
+						  16);
+				if (bytes_read < 0) {
+					fprintf(stderr, "%s: %s:%u: read %s: %s\n",
+						module->name, __FUNCTION__, 
+						__LINE__, filename,
+						strerror(errno));
+					/* Mark firmware as invalid
+					   if there is one */
+					memset(phys_ram_base + flash->offset +
+					       BOOT_SIZE, 0, 16);
+					if (x49gp->firmware != NULL) {
+						fprintf(stderr, "Warning: "
+							"Could not read "
+							"selected firmware, "
+							"falling back to "
+							"bootloader recovery "
+							"tools\n");
+					} else {
+						x49gp_ui_show_error(x49gp,
+								    "Could not "
+								    "read "
+								    "selected "
+								    "firmware!");
+						goto retry;
+					}
+				} else if (bytes_read < 16 ||
+					   memcmp(phys_ram_base +
+						  flash->offset + BOOT_SIZE,
+						  "KINPOUPDATEIMAGE", 16)
+					   != 0) {
+					/* Mark firmware as invalid */
+					memset(phys_ram_base + flash->offset +
+					       BOOT_SIZE, 0, 16);
+					if (x49gp->firmware != NULL) {
+						fprintf(stderr, "Warning: "
+							"Firmware is invalid, "
+							"falling back to "
+							"bootloader recovery "
+							"tools\n");
+					} else {
+						x49gp_ui_show_error(x49gp,
+								    "Selected "
+								    "firmware "
+								    "is "
+								    "invalid!");
+						goto retry;
+					}
+				/* The firmware may be shorter than
+				   SST29VF160_SIZE - BOOT_SIZE, but if so,
+				   read will just give us what it sees.
+				   The space after that will remain empty. */
+				} else if (read(fwfd, phys_ram_base +
+						flash->offset + BOOT_SIZE  + 16,
+						SST29VF160_SIZE -
+						(BOOT_SIZE + 16))
+					   < 0) {
+					fprintf(stderr, "%s: %s:%u: read %s: %s\n",
+						module->name, __FUNCTION__, 
+					        __LINE__, filename,
+					        strerror(errno));
+					/* Mark firmware as invalid
+					   if there is one */
+					memset(phys_ram_base + flash->offset +
+					       BOOT_SIZE, 0, 16);
+					if (x49gp->firmware != NULL) {
+						fprintf(stderr, "Warning: "
+							"Could not read "
+							"selected firmware, "
+							"falling back to "
+							"bootloader recovery "
+							"tools\n");
+					} else {
+						x49gp_ui_show_error(x49gp,
+								    "Could not "
+								    "read "
+								    "selected "
+								    "firmware!");
+						goto retry;
+					}
+				} else {
+					/* Mark firmware as valid in the same
+					   way the bootloader does */
+					memcpy(phys_ram_base + flash->offset +
+					       BOOT_SIZE, "Kinposhcopyright",
+					       16);
+				}
+				close(fwfd);
+			}
+			g_free(filename);
+		}
+	} else {
+		g_free(filename);
+	}
+
+	return error;
 }
 
 static int
-flash_save(x49gp_module_t *module, GKeyFile *config)
+flash_save(x49gp_module_t *module, GKeyFile *key)
 {
 	x49gp_flash_t *flash = module->user_data;
 	int error;
@@ -509,6 +707,8 @@ flash_save(x49gp_module_t *module, GKeyFile *config)
 #ifdef DEBUG_X49GP_MODULES
 	printf("%s: %s:%u\n", module->name, __FUNCTION__, __LINE__);
 #endif
+
+	x49gp_module_set_filename(module, key, "filename", flash->filename);
 
 	error = msync(flash->data, flash->size, MS_ASYNC);
 	if (error) {
@@ -581,13 +781,8 @@ flash_init(x49gp_module_t *module)
 
 	module->user_data = flash;
 
-#ifdef QEMU_OLD
-	flash->iotype = cpu_register_io_memory(0, flash_readfn,
-					       flash_writefn, flash);
-#else
 	flash->iotype = cpu_register_io_memory(flash_readfn,
 					       flash_writefn, flash);
-#endif
 
 	flash->data = (void *) -1;
 	flash->offset = phys_ram_size;

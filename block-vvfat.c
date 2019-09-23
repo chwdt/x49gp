@@ -25,12 +25,8 @@
 #include <sys/stat.h>
 #include <dirent.h>
 #include <assert.h>
-#ifdef QEMU_OLD
-#include "vl.h"
-#else
 #include "qemu-common.h"
 #include "block.h"
-#endif
 #include "block_int.h"
 
 #ifndef S_IWGRP
@@ -47,7 +43,7 @@
     file system (test if the boot sector still relies on that fact)! */
 /* MAYBE TODO: write block-visofs.c */
 
-#define DEBUG
+//#define DEBUG
 #undef DEBUG_SECTORS
 
 #ifdef DEBUG
@@ -640,7 +636,7 @@ static inline direntry_t* create_short_and_long_name(BDRVVVFATState* s,
 
     entry=array_get_next(&(s->directory));
     memset(entry->name,' ',11);
-    strncpy((char *) entry->name,filename,i);
+    memcpy(entry->name,filename,i);
     
     if(j > 0)
 	for (i = 0; i < 3 && filename[j+1+i]; i++)
@@ -892,11 +888,14 @@ static int init_directories(BDRVVVFATState* s,
     stat(dirname, &st);
     entry = array_get_next(&(s->directory));
     entry->attributes = 0x08; /* archive | volume label */
-    memset(entry->name, ' ', 11);
+    memset(entry->name, ' ', 8);
+    memset(entry->extension, ' ', 3);
     namelen = strlen(VOLUME_LABEL);
     if (namelen > 11)
 	namelen = 11;
-    memcpy(entry->name, VOLUME_LABEL, namelen);
+    memcpy(entry->name, VOLUME_LABEL, namelen > 8 ? 8 : namelen);
+    if (namelen > 8)
+	memcpy(entry->extension, VOLUME_LABEL+8, namelen-8);
     entry->reserved[0] = entry->reserved[1] = 0;
     entry->ctime = fat_datetime(st.st_ctime, 1);
     entry->cdate = fat_datetime(st.st_ctime, 0);
@@ -2357,8 +2356,11 @@ static int commit_one_file(BDRVVVFATState* s,
 	c = c1;
     }
 
-    ftruncate(fd, size);
-    close(fd);
+    if (ftruncate(fd, size)) {
+        perror("ftruncate()");
+        close(fd);
+        return -4;
+    }
 
     return commit_mappings(s, first_cluster, dir_index);
 }

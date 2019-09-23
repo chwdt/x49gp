@@ -252,9 +252,6 @@ s3c2410_rtc_read(void *opaque, target_phys_addr_t offset)
 	s3c2410_rtc_t *rtc = opaque;
 	s3c2410_offset_t *reg;
 
-#ifdef QEMU_OLD
-	offset -= S3C2410_RTC_BASE;
-#endif
 	if (! S3C2410_OFFSET_OK(rtc, offset)) {
 		return ~(0);
 	}
@@ -308,9 +305,6 @@ s3c2410_rtc_write(void *opaque, target_phys_addr_t offset, uint32_t data)
 	s3c2410_rtc_t *rtc = opaque;
 	s3c2410_offset_t *reg;
 
-#ifdef QEMU_OLD
-	offset -= S3C2410_RTC_BASE;
-#endif
 	if (! S3C2410_OFFSET_OK(rtc, offset)) {
 		return;
 	}
@@ -458,14 +452,11 @@ s3c2410_rtc_init(x49gp_module_t *module)
 	rtc->alarm_timer = x49gp_new_timer(X49GP_TIMER_REALTIME,
 					   s3c2410_rtc_alarm, rtc);
 
-#ifdef QEMU_OLD
-	iotype = cpu_register_io_memory(0, s3c2410_rtc_readfn,
-					s3c2410_rtc_writefn, rtc);
-#else
 	iotype = cpu_register_io_memory(s3c2410_rtc_readfn,
 					s3c2410_rtc_writefn, rtc);
+#ifdef DEBUG_S3C2410_RTC
+	printf("%s: iotype %08x\n", __FUNCTION__, iotype);
 #endif
-printf("%s: iotype %08x\n", __FUNCTION__, iotype);
 	cpu_register_physical_memory(S3C2410_RTC_BASE, S3C2410_MAP_SIZE, iotype);
 
 	return 0;

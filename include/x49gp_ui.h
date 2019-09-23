@@ -52,7 +52,9 @@ typedef enum {
 
 typedef enum {
 	UI_CALCULATOR_HP49GP = 0,
-	UI_CALCULATOR_HP50G
+	UI_CALCULATOR_HP49GP_NEWRPL,
+	UI_CALCULATOR_HP50G,
+	UI_CALCULATOR_HP50G_NEWRPL
 } x49gp_ui_calculator_t;
 
 
@@ -93,6 +95,9 @@ typedef struct {
 struct __x49gp_ui_s__ {
 	GtkWidget		*window;
 	GtkWidget		*fixed;
+	GtkWidget		*menu;
+	GtkWidget		*menu_unmount;
+	GtkWidget		*menu_debug;
 
 	GdkPixbuf		*bg_pixbuf;
 	GdkPixmap		*bg_pixmap;
@@ -105,6 +110,9 @@ struct __x49gp_ui_s__ {
 
 	x49gp_ui_button_t	*buttons;
 	unsigned int		nr_buttons;
+	unsigned int		buttons_down;
+
+	char			*name;
 
 	GtkWidget		*lcd_canvas;
 	GdkPixmap		*lcd_pixmap;
@@ -137,5 +145,7 @@ struct __x49gp_ui_s__ {
 };
 
 int x49gp_ui_init(x49gp_t *x49gp);
+void x49gp_ui_show_error(x49gp_t *x49gp, const char *text);
+void x49gp_ui_open_firmware(x49gp_t *x49gp, char **filename);
 
 #endif /* !(_X49GP_UI_H) */

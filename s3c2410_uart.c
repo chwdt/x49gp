@@ -381,14 +381,11 @@ s3c2410_uart_init(x49gp_module_t *module)
 	printf("%s: %s:%u\n", module->name, __FUNCTION__, __LINE__);
 #endif
 
-#ifdef QEMU_OLD
-	iotype = cpu_register_io_memory(0, s3c2410_uart_readfn,
-					s3c2410_uart_writefn, uart_regs);
-#else
 	iotype = cpu_register_io_memory(s3c2410_uart_readfn,
 					s3c2410_uart_writefn, uart_regs);
+#ifdef DEBUG_S3C2410_UART
+	printf("%s: iotype %08x\n", __FUNCTION__, iotype);
 #endif
-printf("%s: iotype %08x\n", __FUNCTION__, iotype);
 	cpu_register_physical_memory(S3C2410_UART0_BASE, S3C2410_MAP_SIZE, iotype);
 
 	return 0;
